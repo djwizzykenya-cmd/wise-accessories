@@ -1,0 +1,25 @@
+{
+  "name": "wise-accessories",
+  "version": "0.1.0",
+  "description": "E-commerce marketplace for motorcycle spares in Kenya",
+  "private": true,
+  "scripts": {
+    "dev": "npm run dev --prefix web",
+    "build": "npm run build --prefix web",
+    "test": "npm run test --prefix web",
+    "lint": "npm run lint --prefix web"
+  },
+  "overrides": {
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "keywords": [
+    "e-commerce",
+    "marketplace",
+    "motorcycle",
+    "spares",
+    "kenya"
+  ],
+  "author": "",
+  "license": "MIT"
+}
