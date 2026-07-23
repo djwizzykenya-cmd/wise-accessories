@@ -80,7 +80,7 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
             <div className="mt-6 grid gap-4 sm:grid-cols-2">
               {product.images?.slice(1, 5).map((src, index) => (
                 <div key={index} className="overflow-hidden rounded-3xl bg-slate-100">
-                  <img src={src} alt={`${product.name} ${index + 2}`} className="h-32 w-full object-cover" />
+                  <img src={src} alt={`${product.name} ${index + 2}`} className="h-24 w-full object-cover sm:h-32" />
                 </div>
               ))}
             </div>

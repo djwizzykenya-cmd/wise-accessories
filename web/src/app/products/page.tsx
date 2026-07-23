@@ -71,7 +71,7 @@ export default function ProductsPage() {
   return (
     <main className="min-h-screen bg-slate-50 py-10">
       <div className="max-w-6xl mx-auto px-4">
-        <div className="flex items-center justify-between mb-8">
+        <div className="flex flex-col gap-3 justify-between mb-8 sm:flex-row sm:items-center">
           <div>
             <h1 className="text-3xl font-bold text-slate-900">Browse Products</h1>
             <p className="text-sm text-slate-600">Shop motorcycle spares from verified sellers.</p>
@@ -86,9 +86,9 @@ export default function ProductsPage() {
         ) : products.length === 0 ? (
           <div className="text-center py-20 text-slate-500">No products found yet.</div>
         ) : (
-          <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-6 grid-cols-2 xl:grid-cols-3">
             {products.map((product) => (
-              <Link key={product.id} href={`/products/${product.id}`} className="group rounded-3xl border border-slate-200 bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-lg">
+              <Link key={product.id} href={`/products/${product.id}`} className="group flex h-full flex-col rounded-3xl border border-slate-200 bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-lg">
                 <div className="h-56 overflow-hidden rounded-3xl bg-slate-100">
                   <img
                     src={product.images?.[0] || "/placeholder.png"}

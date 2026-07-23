@@ -178,24 +178,24 @@ export default function HomePage() {
       </section>
 
       <header className="bg-red-600 text-white">
-        <div className="max-w-7xl mx-auto px-4 py-6 grid gap-6 lg:grid-cols-[280px_minmax(0,1fr)] items-center">
+        <div className="max-w-7xl mx-auto px-4 py-6 grid gap-6 lg:grid-cols-[280px_minmax(0,1fr)] items-start">
           <div className="bg-red-700 rounded-3xl p-5 shadow-lg">
             <div className="text-xs uppercase tracking-[0.2em] text-amber-100">Wise Accessories</div>
             <h1 className="mt-4 text-4xl font-bold leading-tight">
               Motorcycle spares, tools and parts with fast delivery.
             </h1>
             <p className="mt-4 text-sm text-amber-100/90">Shop thousands of products with secure payment and delivery across Kenya.</p>
-            <div className="mt-5 flex flex-col gap-3 sm:flex-row">
-              <Link href="/products" className="rounded-full bg-white px-5 py-3 text-sm font-semibold text-red-600 shadow-sm hover:bg-slate-100 text-center">
+            <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center">
+              <Link href="/products" className="w-full rounded-full bg-white px-5 py-3 text-sm font-semibold text-red-600 shadow-sm transition hover:bg-slate-100 text-center sm:w-auto">
                 Shop Now
               </Link>
-              <Link href="/products" className="rounded-full border border-white/70 bg-white/10 px-5 py-3 text-sm text-white hover:bg-white/20 text-center">
+              <Link href="/products" className="w-full rounded-full border border-white/70 bg-white/10 px-5 py-3 text-sm text-white transition hover:bg-white/20 text-center sm:w-auto">
                 Download App
               </Link>
             </div>
           </div>
 
-          <div className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
             {PROMO_CARDS.map((card) => (
               <div key={card.title} className={`rounded-3xl p-6 text-white shadow-xl bg-gradient-to-r ${card.color}`}>
                 <div className="text-sm uppercase tracking-[0.2em] opacity-90">{card.title}</div>
@@ -291,7 +291,7 @@ export default function HomePage() {
           </Link>
         </div>
 
-        <div className="mt-6 grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="mt-6 grid gap-5 grid-cols-2 xl:grid-cols-4">
           {loading ? (
             <div className="col-span-full rounded-3xl bg-white p-10 text-center text-slate-500 shadow-sm">Loading products...</div>
           ) : (

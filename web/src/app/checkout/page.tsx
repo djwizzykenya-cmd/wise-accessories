@@ -152,8 +152,8 @@ export default function CheckoutPage() {
 
   return (
     <main className="min-h-screen bg-slate-50 py-10">
-      <div className="mx-auto max-w-5xl rounded-3xl bg-white p-10 shadow-lg">
-        <div className="mb-6 flex items-center justify-between gap-4">
+      <div className="mx-auto max-w-5xl rounded-3xl bg-white p-6 shadow-lg sm:p-8 lg:p-10">
+        <div className="mb-6 flex flex-col gap-3 justify-between sm:flex-row sm:items-center">
           <h1 className="text-3xl font-bold text-slate-900">Checkout</h1>
           <Link href="/products" className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-red-500 hover:text-red-600">
             ← Back to products

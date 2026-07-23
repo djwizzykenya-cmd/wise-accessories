@@ -13,7 +13,7 @@ interface Props {
 export default function ProductCard({ id, name, price, images = [], seller, category }: Props) {
   const originalPrice = Math.round(price * 1.22);
   return (
-    <div className="group rounded-[28px] bg-white shadow-sm ring-1 ring-slate-200 transition hover:-translate-y-1 hover:shadow-lg">
+    <div className="group flex h-full flex-col rounded-[28px] bg-white shadow-sm ring-1 ring-slate-200 transition hover:-translate-y-1 hover:shadow-lg">
       <Link href={`/products/${id}`} className="block rounded-[28px]">
         <div className="relative overflow-hidden rounded-t-[28px] bg-slate-100">
           <img
@@ -42,7 +42,7 @@ export default function ProductCard({ id, name, price, images = [], seller, cate
 
       <Link
         href={`/checkout?product=${id}`}
-        className="mx-4 mb-4 inline-flex w-auto items-center justify-center rounded-full bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700"
+        className="mx-4 mb-4 mt-auto inline-flex w-full items-center justify-center rounded-full bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700 sm:w-auto"
       >
         Buy now
       </Link>
