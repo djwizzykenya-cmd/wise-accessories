@@ -36,7 +36,7 @@ export default function AuthPage() {
     <main className="min-h-screen bg-slate-50 py-20">
       <div className="mx-auto w-full max-w-md rounded-3xl bg-white p-8 shadow-xl">
         <h1 className="text-3xl font-bold text-slate-900 mb-3">Login to Wise Accessories</h1>
-        <p className="text-sm text-slate-500 mb-6">Use your email and password to sign in.</p>
+        <p className="text-sm text-slate-500 mb-6">Use your email and password to sign in. For a demo account, try admin@wise.test with adminpass.</p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <label className="block">

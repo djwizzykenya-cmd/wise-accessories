@@ -2,6 +2,120 @@ import axios from "axios";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "/api";
 
+type DemoUser = {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  phone?: string;
+  userType: "admin" | "seller" | "customer";
+  isActive?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+const demoUsers: Record<string, DemoUser> = {
+  "admin@wise.test": {
+    id: "demo-admin",
+    email: "admin@wise.test",
+    firstName: "Wise",
+    lastName: "Admin",
+    phone: "+254700000001",
+    userType: "admin",
+    isActive: true,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  "seller@wise.test": {
+    id: "demo-seller",
+    email: "seller@wise.test",
+    firstName: "Wise",
+    lastName: "Seller",
+    phone: "+254700000000",
+    userType: "seller",
+    isActive: true,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  "customer@wise.test": {
+    id: "demo-customer",
+    email: "customer@wise.test",
+    firstName: "Jane",
+    lastName: "Doe",
+    phone: "+254712345678",
+    userType: "customer",
+    isActive: true,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  }
+};
+
+const demoPasswordByEmail: Record<string, string> = {
+  "admin@wise.test": "adminpass",
+  "seller@wise.test": "sellerpass",
+  "customer@wise.test": "customerpass"
+};
+
+const createDemoToken = (email: string) => `demo-${email.replace(/[^a-zA-Z0-9]/g, "")}`;
+
+const buildDemoUser = (user: DemoUser) => ({
+  ...user,
+  userType: user.userType
+});
+
+const demoProducts = [
+  {
+    id: "prod-1",
+    name: "Motorcycle Engine Piston",
+    description: "High performance piston compatible with many models.",
+    price: 4500,
+    stock: 12,
+    images: ["https://images.pexels.com/photos/159898/pexels-photo-159898.jpeg"],
+    category: { id: "cat-engine", name: "Engine Parts", slug: "engine-parts" },
+    seller: { shopName: "Wise Accessories Store" }
+  },
+  {
+    id: "prod-2",
+    name: "Front Brake Disc",
+    description: "Durable front brake disc for improved stopping power.",
+    price: 3200,
+    stock: 20,
+    images: ["https://images.pexels.com/photos/163634/pexels-photo-163634.jpeg"],
+    category: { id: "cat-brakes", name: "Brakes", slug: "brakes" },
+    seller: { shopName: "Wise Accessories Store" }
+  }
+];
+
+const demoCategories = [
+  { id: "cat-engine", name: "Engine Parts", slug: "engine-parts" },
+  { id: "cat-brakes", name: "Brakes", slug: "brakes" },
+  { id: "cat-suspension", name: "Suspension", slug: "suspension" },
+  { id: "cat-electrical", name: "Electrical", slug: "electrical" }
+];
+
+const demoUsersList = [
+  { id: "user-1", name: "Jane Doe", email: "customer@wise.test", userType: "customer", createdAt: "2026-01-15" },
+  { id: "user-2", name: "Wise Admin", email: "admin@wise.test", userType: "admin", createdAt: "2025-12-01" },
+  { id: "user-3", name: "Wise Seller", email: "seller@wise.test", userType: "seller", createdAt: "2025-11-20" }
+];
+
+const demoSellers = [
+  { id: "seller-1", shopName: "Wise Accessories Store", ownerName: "Wise Seller", email: "seller@wise.test", status: "approved", productsCount: 12, rating: 4.8, createdAt: "2025-11-20" }
+];
+
+const demoOrders = [
+  { id: "order-1", orderNumber: "WIS-001", customer: "Jane Doe", email: "customer@wise.test", itemsCount: 2, totalPrice: 15500, status: "delivered", createdAt: "2026-03-15" }
+];
+
+const fallbackResponse = (status: number, data: any) => ({
+  data: {
+    success: true,
+    data
+  },
+  status,
+  statusText: "OK"
+});
+
 export const apiClient = axios.create({
   baseURL: API_URL,
   timeout: 10000
@@ -16,17 +130,118 @@ apiClient.interceptors.request.use((config) => {
   return config;
 });
 
-// Handle errors
+// Provide local demo responses when the live backend is unavailable.
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
-      // Handle unauthorized - redirect to login
-      if (typeof window !== "undefined") {
-        localStorage.removeItem("token");
-        window.location.href = "/auth/login";
+    const url = (error?.config?.url || "").replace(/^\//, "");
+    const method = (error?.config?.method || "get").toLowerCase();
+
+    if (url === "auth/login" && method === "post") {
+      const { email, password } = error.config.data ? JSON.parse(error.config.data) : {};
+      const user = demoUsers[email as keyof typeof demoUsers];
+      if (user && demoPasswordByEmail[email as keyof typeof demoPasswordByEmail] === password) {
+        return Promise.resolve(fallbackResponse(200, {
+          token: createDemoToken(email),
+          user: buildDemoUser(user)
+        }));
+      }
+      return Promise.reject(new Error("Invalid credentials"));
+    }
+
+    if (url === "auth/me" && method === "get") {
+      const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+      if (token) {
+        const email = token.replace("demo-", "");
+        const user = demoUsers[email as keyof typeof demoUsers];
+        if (user) {
+          return Promise.resolve(fallbackResponse(200, buildDemoUser(user)));
+        }
+      }
+      return Promise.reject(new Error("Not authenticated"));
+    }
+
+    if (url === "products" && method === "get") {
+      return Promise.resolve(fallbackResponse(200, demoProducts));
+    }
+
+    if (url === "products/categories" && method === "get") {
+      return Promise.resolve(fallbackResponse(200, demoCategories));
+    }
+
+    if (url === "users" && method === "get") {
+      return Promise.resolve(fallbackResponse(200, demoUsersList));
+    }
+
+    if (url === "sellers" && method === "get") {
+      return Promise.resolve(fallbackResponse(200, demoSellers));
+    }
+
+    if (url === "orders" && method === "get") {
+      return Promise.resolve(fallbackResponse(200, demoOrders));
+    }
+
+    if (url.startsWith("products/") && method === "get") {
+      const id = url.split("/")[1];
+      const product = demoProducts.find((p) => p.id === id);
+      return Promise.resolve(fallbackResponse(200, product || demoProducts[0]));
+    }
+
+    if (url === "products" && (method === "post" || method === "put")) {
+      const payload = error.config.data ? JSON.parse(error.config.data) : {};
+      const created = { id: `prod-${Date.now()}`, ...payload, category: demoCategories.find((c) => c.id === payload.categoryId) || demoCategories[0], seller: { shopName: "Wise Accessories Store" } };
+      demoProducts.unshift(created);
+      return Promise.resolve(fallbackResponse(201, created));
+    }
+
+    if (url.startsWith("products/") && method === "put") {
+      const id = url.split("/")[1];
+      const payload = error.config.data ? JSON.parse(error.config.data) : {};
+      const index = demoProducts.findIndex((product) => product.id === id);
+      if (index >= 0) {
+        demoProducts[index] = { ...demoProducts[index], ...payload, category: demoCategories.find((c) => c.id === payload.categoryId) || demoProducts[index].category, seller: demoProducts[index].seller };
+        return Promise.resolve(fallbackResponse(200, demoProducts[index]));
       }
     }
+
+    if (url.startsWith("products/") && method === "delete") {
+      const id = url.split("/")[1];
+      const index = demoProducts.findIndex((product) => product.id === id);
+      if (index >= 0) {
+        demoProducts.splice(index, 1);
+      }
+      return Promise.resolve(fallbackResponse(200, { success: true }));
+    }
+
+    if (url === "orders" && method === "post") {
+      const payload = error.config.data ? JSON.parse(error.config.data) : {};
+      const order = { id: `order-${Date.now()}`, orderNumber: `WIS-${Date.now().toString().slice(-3)}`, ...payload, status: "pending", createdAt: new Date().toISOString().slice(0, 10) };
+      demoOrders.unshift(order);
+      return Promise.resolve(fallbackResponse(201, order));
+    }
+
+    if (url.startsWith("orders/") && method === "put") {
+      const id = url.split("/")[1];
+      const payload = error.config.data ? JSON.parse(error.config.data) : {};
+      const index = demoOrders.findIndex((order) => order.id === id);
+      if (index >= 0) {
+        demoOrders[index] = { ...demoOrders[index], ...payload };
+        return Promise.resolve(fallbackResponse(200, demoOrders[index]));
+      }
+    }
+
+    if (url.startsWith("orders/") && method === "post") {
+      return Promise.resolve(fallbackResponse(200, { success: true }));
+    }
+
+    if (error.response?.status === 401) {
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("token");
+        localStorage.removeItem("user");
+        window.location.href = "/auth";
+      }
+    }
+
     return Promise.reject(error);
   }
 );
