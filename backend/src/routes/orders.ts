@@ -3,7 +3,7 @@ import bcrypt from "bcrypt";
 import { randomUUID } from "crypto";
 import prisma from "../prisma";
 import { asyncHandler, AppError } from "../middleware/errorHandler";
-import { OrderStatus, PaymentMethod, PaymentStatus, UserType } from "@prisma/client";
+import { OrderStatus, PaymentMethod, PaymentStatus, UserType } from "@wise-accessories/shared";
 
 const router = express.Router();
 
@@ -62,7 +62,7 @@ router.post(
         throw new AppError("Authenticated customer not found", 401);
       }
 
-      if (user.userType !== "CUSTOMER") {
+      if (user.userType !== "customer") {
         throw new AppError("Only customers can place orders", 403);
       }
 
@@ -105,9 +105,9 @@ router.post(
       }));
     }
 
-    const dbPaymentMethod = String(paymentMethod).toUpperCase();
-    const dbStatus = String(OrderStatus.PENDING).toUpperCase();
-    const dbPaymentStatus = String(PaymentStatus.PENDING).toUpperCase();
+    const dbPaymentMethod = String(paymentMethod).toLowerCase();
+    const dbStatus = String(OrderStatus.PENDING).toLowerCase();
+    const dbPaymentStatus = String(PaymentStatus.PENDING).toLowerCase();
 
     if (!dbDown && products.length !== items.length) {
       throw new AppError("One or more products were not found", 404);
@@ -181,9 +181,9 @@ router.post(
             customerId: customer.id,
             sellerId,
             totalAmount,
-            paymentMethod: String(paymentMethod).toUpperCase() as any,
-            status: "PENDING",
-            paymentStatus: "PENDING",
+            paymentMethod: String(paymentMethod).toLowerCase() as any,
+            status: "pending",
+            paymentStatus: "pending",
             shippingAddressId: address.id
           }
         });
@@ -206,8 +206,8 @@ router.post(
             orderId: order.id,
             sellerId,
             amount: totalAmount,
-            method: String(paymentMethod).toUpperCase() as any,
-            status: "PENDING",
+            method: String(paymentMethod).toLowerCase() as any,
+            status: "pending",
             sellerPayout,
             platformCommission
           }
@@ -242,9 +242,9 @@ router.post(
         customerId: customer?.id || null,
         sellerId,
         totalAmount,
-        status: "PENDING",
-        paymentStatus: "PENDING",
-        paymentMethod: String(paymentMethod).toUpperCase(),
+        status: "pending",
+        paymentStatus: "pending",
+        paymentMethod: String(paymentMethod).toLowerCase(),
         shippingAddress: shippingAddress,
         items: lineItems,
         createdAt: new Date().toISOString()
@@ -255,8 +255,8 @@ router.post(
         orderId: fallbackOrderId,
         sellerId,
         amount: totalAmount,
-        method: String(paymentMethod).toUpperCase(),
-        status: "PENDING",
+        method: String(paymentMethod).toLowerCase(),
+        status: "pending",
         transactionId: null,
         createdAt: new Date().toISOString()
       };
@@ -294,24 +294,24 @@ router.post(
         const memOrder = IN_MEMORY_ORDERS.get(orderId);
         if (!memOrder) throw new AppError("Order not found", 404);
 
-        if (memOrder.paymentStatus === "COMPLETED") {
+        if (memOrder.paymentStatus === "completed") {
           throw new AppError("Payment has already been completed for this order", 400);
         }
 
         const memPayment = Array.from(IN_MEMORY_PAYMENTS.values()).find((p) => p.orderId === orderId);
         if (!memPayment) throw new AppError("No payment record found for this order", 400);
 
-        memPayment.status = "COMPLETED";
+        memPayment.status = "completed";
         memPayment.transactionId = transactionId;
         IN_MEMORY_PAYMENTS.set(memPayment.id, memPayment);
 
-        memOrder.status = "CONFIRMED";
-        memOrder.paymentStatus = "COMPLETED";
+        memOrder.status = "confirmed";
+        memOrder.paymentStatus = "completed";
         IN_MEMORY_ORDERS.set(orderId, memOrder);
 
         return res.json({
           success: true,
-          data: { orderId, status: "CONFIRMED", paymentStatus: "COMPLETED", fallback: true }
+          data: { orderId, status: "confirmed", paymentStatus: "completed", fallback: true }
         });
       }
 
@@ -352,24 +352,24 @@ router.post(
         const memOrder = IN_MEMORY_ORDERS.get(orderId);
         if (!memOrder) throw new AppError("Order not found", 404);
 
-        if (memOrder.paymentStatus === "COMPLETED") {
+        if (memOrder.paymentStatus === "completed") {
           throw new AppError("Payment has already been completed for this order", 400);
         }
 
         const memPayment = Array.from(IN_MEMORY_PAYMENTS.values()).find((p) => p.orderId === orderId);
         if (!memPayment) throw new AppError("No payment record found for this order", 400);
 
-        memPayment.status = "COMPLETED";
+        memPayment.status = "completed";
         memPayment.transactionId = transactionId;
         IN_MEMORY_PAYMENTS.set(memPayment.id, memPayment);
 
-        memOrder.status = "CONFIRMED";
-        memOrder.paymentStatus = "COMPLETED";
+        memOrder.status = "confirmed";
+        memOrder.paymentStatus = "completed";
         IN_MEMORY_ORDERS.set(orderId, memOrder);
 
         return res.json({
           success: true,
-          data: { orderId, status: "CONFIRMED", paymentStatus: "COMPLETED", fallback: true }
+          data: { orderId, status: "confirmed", paymentStatus: "completed", fallback: true }
         });
       }
 

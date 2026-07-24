@@ -5,6 +5,23 @@ import { asyncHandler, AppError } from "../middleware/errorHandler";
 import { authenticate, authorize } from "../middleware/auth";
 import { UserType } from "@wise-accessories/shared";
 
+const parseImages = (images: unknown) => {
+  if (Array.isArray(images)) {
+    return images;
+  }
+
+  if (typeof images === "string") {
+    try {
+      const parsed = JSON.parse(images);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+
+  return [];
+};
+
 const router = express.Router();
 
 const FALLBACK_PRODUCTS = [
@@ -160,7 +177,10 @@ router.get(
 
       res.json({
         success: true,
-        data: products,
+        data: products.map((product) => ({
+          ...product,
+          images: parseImages(product.images)
+        })),
         meta: {
           total,
           page,
@@ -189,6 +209,36 @@ router.get(
 );
 
 router.get(
+  "/categories",
+  asyncHandler(async (_req, res) => {
+    const categories = await prisma.category.findMany();
+    res.json({ success: true, data: categories });
+  })
+);
+
+router.get(
+  "/sellers",
+  authenticate,
+  authorize(UserType.ADMIN),
+  asyncHandler(async (_req, res) => {
+    const sellers = await prisma.seller.findMany({
+      include: {
+        user: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true
+          }
+        }
+      }
+    });
+
+    res.json({ success: true, data: sellers });
+  })
+);
+
+router.get(
   "/:id",
   asyncHandler(async (req: any, res) => {
     try {
@@ -208,7 +258,10 @@ router.get(
       if (product) {
         return res.json({
           success: true,
-          data: product
+          data: {
+            ...product,
+            images: parseImages(product.images)
+          }
         });
       }
     } catch (error) {
@@ -227,25 +280,62 @@ router.get(
   })
 );
 
+router.get(
+  "/sellers",
+  authenticate,
+  authorize(UserType.ADMIN),
+  asyncHandler(async (_req, res) => {
+    const sellers = await prisma.seller.findMany({
+      include: {
+        user: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true
+          }
+        }
+      }
+    });
+
+    res.json({ success: true, data: sellers });
+  })
+);
+
 router.post(
   "/",
   authenticate,
-  authorize(UserType.SELLER),
+  authorize(UserType.SELLER, UserType.ADMIN),
   asyncHandler(async (req, res) => {
-    const { name, description, categoryId, price, stock, images } = req.body;
+    const { name, description, categoryId, price, stock, images, sellerId } = req.body;
 
     if (!name || !categoryId || !price || !stock) {
       throw new AppError("Missing required fields", 400);
     }
 
-    const seller = await prisma.seller.findUnique({
-      where: {
-        userId: (req as any).user.id
+    let seller = null as any;
+    const currentUser = (req as any).user;
+    if (currentUser.userType === UserType.SELLER) {
+      seller = await prisma.seller.findUnique({
+        where: {
+          userId: currentUser.id
+        }
+      });
+      if (!seller) {
+        throw new AppError("Seller profile not found", 404);
       }
-    });
+    } else {
+      if (sellerId) {
+        seller = await prisma.seller.findUnique({ where: { id: sellerId } });
+      }
 
-    if (!seller) {
-      throw new AppError("Seller profile not found", 404);
+      if (!seller) {
+        seller = await prisma.seller.findFirst({ orderBy: { createdAt: "asc" } });
+      }
+
+      if (!seller) {
+        throw new AppError("No seller found for product creation", 404);
+      }
     }
 
     const product = await prisma.product.create({
@@ -256,15 +346,44 @@ router.post(
         categoryId,
         price: Number(price),
         stock: Number(stock),
-        images: Array.isArray(images) ? images : [],
+        images: JSON.stringify(Array.isArray(images) ? images : []),
         isActive: true
       }
     });
 
     res.status(201).json({
       success: true,
-      data: product
+      data: {
+        ...product,
+        images: parseImages(product.images)
+      }
     });
+  })
+);
+
+router.delete(
+  "/:id",
+  authenticate,
+  authorize(UserType.SELLER, UserType.ADMIN),
+  asyncHandler(async (req: any, res) => {
+    const product = await prisma.product.findUnique({ where: { id: req.params.id } });
+    if (!product) {
+      throw new AppError("Product not found", 404);
+    }
+
+    if (req.user.userType === UserType.SELLER) {
+      const seller = await prisma.seller.findUnique({
+        where: {
+          userId: req.user.id
+        }
+      });
+      if (!seller || seller.id !== product.sellerId) {
+        throw new AppError("Forbidden", 403);
+      }
+    }
+
+    await prisma.product.delete({ where: { id: req.params.id } });
+    res.json({ success: true });
   })
 );
 

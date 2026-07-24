@@ -21,29 +21,59 @@ async function main() {
     console.log("Categories already seeded.");
   }
 
+  const adminEmail = "admin@wise.test";
+  const existingAdmin = await prisma.user.findUnique({ where: { email: adminEmail } });
+  if (!existingAdmin) {
+    const adminPasswordHash = await bcrypt.hash("adminpass", 10);
+    await prisma.user.create({
+      data: {
+        email: adminEmail,
+        password: adminPasswordHash,
+        firstName: "Wise",
+        lastName: "Admin",
+        phone: "+254700000001",
+        userType: "admin"
+      }
+    });
+    console.log("Seeded admin user: admin@wise.test / adminpass");
+  } else {
+    console.log("Admin user already seeded.");
+  }
+
   // Seed a sample seller and products if none exist
   const prodCount = await prisma.product.count();
   if (prodCount === 0) {
-    const passwordHash = await bcrypt.hash("sellerpass", 10);
+    const sellerEmail = "seller@wise.test";
+    let sellerUser = await prisma.user.findUnique({ where: { email: sellerEmail } });
 
-    const user = await prisma.user.create({
-      data: {
-        email: "seller@wise.test",
-        password: passwordHash,
-        firstName: "Wise",
-        lastName: "Seller",
-        phone: "+254700000000",
-        userType: "SELLER",
-        seller: {
-          create: {
-            shopName: "Wise Accessories Store",
-            shopDescription: "Quality motorcycle spares",
-            isApproved: true,
-            isVerified: true
-          }
+    if (!sellerUser) {
+      const passwordHash = await bcrypt.hash("sellerpass", 10);
+      sellerUser = await prisma.user.create({
+        data: {
+          email: sellerEmail,
+          password: passwordHash,
+          firstName: "Wise",
+          lastName: "Seller",
+          phone: "+254700000000",
+          userType: "seller"
         }
-      }
-    });
+      });
+    }
+
+    let seller = await prisma.seller.findUnique({ where: { userId: sellerUser.id } });
+    if (!seller) {
+      seller = await prisma.seller.create({
+        data: {
+          userId: sellerUser.id,
+          shopName: "Wise Accessories Store",
+          shopDescription: "Verified seller store",
+          commissionRate: 0.1,
+          isApproved: true,
+          isVerified: true,
+          totalRevenue: 0
+        }
+      });
+    }
 
     const categoriesMap = await prisma.category.findMany();
     const catBySlug: Record<string, string> = {};
@@ -102,9 +132,7 @@ async function main() {
       }
     ];
 
-    // fetch seller created in nested create
-    const seller = await prisma.seller.findUnique({ where: { userId: user.id } });
-    const sellerId = seller ? seller.id : undefined;
+    const sellerId = seller.id;
 
     for (const p of sampleProducts) {
       await prisma.product.create({
@@ -115,7 +143,7 @@ async function main() {
           categoryId: catBySlug[p.categorySlug] || categoriesMap[0].id,
           price: p.price,
           stock: p.stock,
-          images: p.images,
+          images: JSON.stringify(p.images),
           isActive: true
         }
       });

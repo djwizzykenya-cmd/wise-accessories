@@ -21,7 +21,7 @@ const safeUser = (user: any) => ({
   firstName: user.firstName,
   lastName: user.lastName,
   phone: user.phone,
-  userType: user.userType,
+  userType: String(user.userType).toLowerCase(),
   isActive: user.isActive,
   createdAt: user.createdAt,
   updatedAt: user.updatedAt
@@ -46,11 +46,19 @@ router.post(
     }
 
     const normalizedUserType =
-      userType === UserType.SELLER ? UserType.SELLER : UserType.CUSTOMER;
+      userType === UserType.SELLER
+        ? UserType.SELLER
+        : userType === UserType.ADMIN
+        ? UserType.ADMIN
+        : UserType.CUSTOMER;
 
-    // Map shared UserType (lowercase) to Prisma enum tokens (uppercase)
+    // Map shared UserType values to Prisma userType strings
     const prismaUserType =
-      normalizedUserType === UserType.SELLER ? "SELLER" : "CUSTOMER";
+      normalizedUserType === UserType.SELLER
+        ? "seller"
+        : normalizedUserType === UserType.ADMIN
+        ? "admin"
+        : "customer";
 
     const existingUser = await prisma.user.findUnique({
       where: { email }
@@ -62,32 +70,30 @@ router.post(
 
     const passwordHash = await bcrypt.hash(password, 10);
 
+    const createData: any = {
+      email,
+      password: passwordHash,
+      firstName,
+      lastName,
+      phone,
+      userType: prismaUserType
+    };
+
+    if (normalizedUserType === UserType.CUSTOMER) {
+      createData.customer = { create: {} };
+    } else if (normalizedUserType === UserType.SELLER) {
+      createData.seller = {
+        create: {
+          shopName: shopName || `${firstName} ${lastName} Store`,
+          shopDescription,
+          isApproved: false,
+          isVerified: false
+        }
+      };
+    }
+
     const user = await prisma.user.create({
-      // cast to any to avoid complex generated nested-create types during dev
-      data: {
-        email,
-        password: passwordHash,
-        firstName,
-        lastName,
-        phone,
-        userType: prismaUserType,
-        ...(normalizedUserType === UserType.CUSTOMER
-          ? {
-              customer: {
-                create: {}
-              }
-            }
-          : {
-              seller: {
-                create: {
-                  shopName: shopName || `${firstName} ${lastName} Store`,
-                  shopDescription,
-                  isApproved: false,
-                  isVerified: false
-                }
-              }
-            })
-      } as any
+      data: createData
     });
 
     const token = createToken(user.id, user.userType);

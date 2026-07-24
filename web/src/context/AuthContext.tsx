@@ -6,7 +6,8 @@ import apiClient from "@/lib/api";
 interface AuthContextType {
   token: string | null;
   user: any | null;
-  login: (email: string, password: string) => Promise<void>;
+  isReady: boolean;
+  login: (email: string, password: string) => Promise<any>;
   logout: () => void;
   isAuthenticated: boolean;
 }
@@ -43,6 +44,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     setUser(authUser);
     localStorage.setItem("token", authToken);
     localStorage.setItem("user", JSON.stringify(authUser));
+    return authUser;
   };
 
   const logout = () => {
@@ -61,6 +63,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       value={{
         token,
         user,
+        isReady,
         login,
         logout,
         isAuthenticated: !!token

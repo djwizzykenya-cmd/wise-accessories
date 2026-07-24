@@ -1,9 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 
 export default function AuthPage() {
+  const router = useRouter();
   const { login } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -16,7 +18,12 @@ export default function AuthPage() {
     setError("");
 
     try {
-      await login(email, password);
+      const authUser = await login(email, password);
+      if (authUser?.userType === "admin") {
+        router.push("/admin");
+      } else {
+        router.push("/");
+      }
     } catch (err) {
       console.error(err);
       setError("Invalid credentials or server error.");

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import ProductCard from "@/components/ProductCard";
+import { useAuth } from "@/context/AuthContext";
 
 interface Product {
   id: string;
@@ -79,6 +80,7 @@ const FALLBACK_PRODUCTS: Product[] = [
 ];
 
 export default function HomePage() {
+  const { user } = useAuth();
   const [products, setProducts] = useState<Product[]>(FALLBACK_PRODUCTS);
   const [loading, setLoading] = useState(false);
   const [countdown, setCountdown] = useState<CountdownTime>({ hours: 1, minutes: 58, seconds: 32 });
@@ -167,9 +169,15 @@ export default function HomePage() {
             ))}
           </div>
           <div className="flex flex-wrap items-center gap-4">
-            <Link href="/auth" className="hover:text-red-600">
-              Sign In
-            </Link>
+            {user?.userType === "admin" ? (
+              <Link href="/admin" className="hover:text-red-600">
+                Admin Dashboard
+              </Link>
+            ) : (
+              <Link href="/auth" className="hover:text-red-600">
+                Sign In
+              </Link>
+            )}
             <Link href="/checkout" className="hover:text-red-600">
               Cart
             </Link>
