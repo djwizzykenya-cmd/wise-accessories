@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import type { LatLngTuple, LeafletMouseEvent, Map as LeafletMap, Marker } from "leaflet";
 
 interface Coords {
   lat: number;
@@ -12,7 +13,7 @@ const JS_URL = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
 
 function loadScript(src: string) {
   return new Promise<void>((resolve, reject) => {
-    if (document.querySelector(`script[src=\"${src}\"]`)) return resolve();
+    if (document.querySelector(`script[src="${src}"]`)) return resolve();
     const s = document.createElement("script");
     s.src = src;
     s.async = true;
@@ -23,7 +24,7 @@ function loadScript(src: string) {
 }
 
 function ensureCss(href: string) {
-  if (document.querySelector(`link[href=\"${href}\"]`)) return;
+  if (document.querySelector(`link[href="${href}"]`)) return;
   const l = document.createElement("link");
   l.rel = "stylesheet";
   l.href = href;
@@ -32,13 +33,20 @@ function ensureCss(href: string) {
 
 export default function DeliveryMap({ initial }: { initial?: Coords }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const mapRef = useRef<any>(null);
-  const markerRef = useRef<any>(null);
+  const mapRef = useRef<LeafletMap | null>(null);
+  const markerRef = useRef<Marker | null>(null);
+  const coordsRef = useRef<Coords | null>(initial ?? null);
   const [coords, setCoords] = useState<Coords | null>(() => {
     try {
       const raw = localStorage.getItem("deliveryCoords");
-      if (raw) return JSON.parse(raw);
-    } catch (e) {}
+      if (raw) {
+        const parsed = JSON.parse(raw) as Coords;
+        coordsRef.current = parsed;
+        return parsed;
+      }
+    } catch {
+      // ignore invalid saved coords
+    }
     return initial || null;
   });
   const [loading, setLoading] = useState(false);
@@ -51,71 +59,75 @@ export default function DeliveryMap({ initial }: { initial?: Coords }) {
       .then(() => {
         if (!mounted) return;
         (async () => {
-          // prefer global L from CDN, otherwise dynamic import
-          // @ts-ignore
-          let L = (window as any).L;
+          const windowWithLeaflet = window as Window & { L?: typeof import("leaflet") };
+          let L = windowWithLeaflet.L;
+
           if (!L) {
             try {
-              // dynamic import of leaflet as fallback
-              // eslint-disable-next-line @typescript-eslint/no-var-requires
               const mod = await import("leaflet");
               L = mod;
-            } catch (e) {
-              console.error("Leaflet not available:", e);
+            } catch (error) {
+              console.error("Leaflet not available:", error);
               return;
             }
           }
 
           if (!containerRef.current) return;
 
-          const defaultCoords = coords || { lat: -1.286389, lng: 36.817223 };
-          mapRef.current = L.map(containerRef.current).setView([defaultCoords.lat, defaultCoords.lng], 13);
+          const defaultCoords: Coords = coordsRef.current ?? { lat: -1.286389, lng: 36.817223 };
+          mapRef.current = L.map(containerRef.current).setView([defaultCoords.lat, defaultCoords.lng] as LatLngTuple, 13);
 
           L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
             attribution: '&copy; OpenStreetMap contributors'
           }).addTo(mapRef.current);
 
-          markerRef.current = L.marker([defaultCoords.lat, defaultCoords.lng], { draggable: true }).addTo(mapRef.current);
+          markerRef.current = L.marker([defaultCoords.lat, defaultCoords.lng] as LatLngTuple, { draggable: true }).addTo(mapRef.current);
 
           markerRef.current.on("dragend", () => {
-            const p = markerRef.current.getLatLng();
-            const next = { lat: p.lat, lng: p.lng };
+            const point = markerRef.current?.getLatLng();
+            if (!point) return;
+            const next = { lat: point.lat, lng: point.lng };
             setCoords(next);
+            coordsRef.current = next;
             try {
               localStorage.setItem("deliveryCoords", JSON.stringify(next));
-            } catch (e) {}
+            } catch {
+              // ignore localStorage errors
+            }
           });
 
-          mapRef.current.on("click", (e: any) => {
-            markerRef.current.setLatLng(e.latlng);
-            const next = { lat: e.latlng.lat, lng: e.latlng.lng };
+          mapRef.current.on("click", (event: LeafletMouseEvent) => {
+            markerRef.current?.setLatLng(event.latlng);
+            const next = { lat: event.latlng.lat, lng: event.latlng.lng };
             setCoords(next);
+            coordsRef.current = next;
             try {
               localStorage.setItem("deliveryCoords", JSON.stringify(next));
-            } catch (e) {}
+            } catch {
+              // ignore localStorage errors
+            }
           });
-        })().catch((err) => console.error(err));
+        })().catch((error) => console.error(error));
       })
-      .catch((err) => console.error(err));
+      .catch((error) => console.error(error));
 
     return () => {
       mounted = false;
-      try {
-        if (mapRef.current) {
-          mapRef.current.remove();
-          mapRef.current = null;
-        }
-      } catch (e) {}
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
+      }
     };
   }, []);
 
   useEffect(() => {
-    // keep map centered when coords change externally
     if (coords && mapRef.current) {
       try {
-        mapRef.current.setView([coords.lat, coords.lng], 13);
-        markerRef.current?.setLatLng([coords.lat, coords.lng]);
-      } catch (e) {}
+        mapRef.current.setView([coords.lat, coords.lng] as LatLngTuple, 13);
+        markerRef.current?.setLatLng([coords.lat, coords.lng] as LatLngTuple);
+      } catch {
+        // ignore leaflet issues while rendering
+      }
     }
   }, [coords]);
 
@@ -126,17 +138,19 @@ export default function DeliveryMap({ initial }: { initial?: Coords }) {
       (pos) => {
         const next = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         setCoords(next);
+        coordsRef.current = next;
         try {
           localStorage.setItem("deliveryCoords", JSON.stringify(next));
-        } catch (e) {}
+        } catch {
+          // ignore localStorage errors
+        }
         if (mapRef.current) {
-          mapRef.current.setView([next.lat, next.lng], 13);
-          markerRef.current?.setLatLng([next.lat, next.lng]);
+          mapRef.current.setView([next.lat, next.lng] as LatLngTuple, 13);
+          markerRef.current?.setLatLng([next.lat, next.lng] as LatLngTuple);
         }
         setLoading(false);
       },
-      (err) => {
-        console.error(err);
+      () => {
         setLoading(false);
         alert("Unable to get your location. Please allow location access or enter an address.");
       }

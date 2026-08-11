@@ -19,7 +19,9 @@ export default function PaymentPage() {
     try {
       const raw = localStorage.getItem("deliveryCoords");
       if (raw) setCoords(JSON.parse(raw));
-    } catch (e) {}
+    } catch {
+      // ignore invalid saved coords
+    }
   }, []);
 
   const handlePay = async () => {

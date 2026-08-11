@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import Link from "next/link";
@@ -9,14 +9,59 @@ function AdminDashboard() {
   const { user, isReady } = useAuth();
   const router = useRouter();
 
-  useEffect(() => {
-    if (!isReady) return;
+    const [counts, setCounts] = useState<{
+      products: number | null;
+      users: number | null;
+      sellers: number | null;
+      orders: number | null;
+    }>({ products: null, users: null, sellers: null, orders: null });
+    const [statsLoading, setStatsLoading] = useState(true);
+    const [statsError, setStatsError] = useState<string | null>(null);
 
-    if (!user || user.userType !== "admin") {
-      router.replace("/");
-      return;
-    }
-  }, [isReady, user, router]);
+    useEffect(() => {
+      if (!isReady) return;
+
+      if (!user || user.userType !== "admin") {
+        router.replace("/");
+        return;
+      }
+
+      let mounted = true;
+
+      const loadStats = async () => {
+        setStatsLoading(true);
+        setStatsError(null);
+
+        try {
+          const prodRes = await (await import("@/lib/api")).default.get("/products/admin?limit=1");
+          const productsTotal = prodRes.data?.meta?.total ?? (Array.isArray(prodRes.data?.data) ? prodRes.data.data.length : null);
+
+          const usersRes = await (await import("@/lib/api")).default.get("/users");
+          const usersTotal = Array.isArray(usersRes.data?.data) ? usersRes.data.data.length : null;
+
+          const sellersRes = await (await import("@/lib/api")).default.get("/sellers");
+          const sellersTotal = Array.isArray(sellersRes.data?.data) ? sellersRes.data.data.length : null;
+
+          const ordersRes = await (await import("@/lib/api")).default.get("/orders");
+          const ordersTotal = Array.isArray(ordersRes.data?.data) ? ordersRes.data.data.length : null;
+
+          if (!mounted) return;
+          setCounts({ products: productsTotal, users: usersTotal, sellers: sellersTotal, orders: ordersTotal });
+        } catch (err: unknown) {
+          console.warn("Failed to load admin stats", err);
+          if (!mounted) return;
+          setStatsError("Could not load stats");
+        } finally {
+          if (mounted) setStatsLoading(false);
+        }
+      };
+
+      loadStats();
+
+      return () => {
+        mounted = false;
+      };
+    }, [isReady, user, router]);
 
   if (!isReady || !user) {
     return (
@@ -33,7 +78,9 @@ function AdminDashboard() {
       <div className="mx-auto max-w-7xl space-y-8 px-4">
         {/* Welcome Header */}
         <div className="rounded-3xl bg-gradient-to-r from-blue-600 to-blue-800 p-8 shadow-xl text-white">
-          <h1 className="text-4xl font-bold mb-2">Welcome, {user.name || "Admin"}!</h1>
+          <h1 className="text-4xl font-bold mb-2">
+            Welcome, {user.firstName || user.lastName ? `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim() : "Admin"}!
+          </h1>
           <p className="text-blue-100 text-lg">Manage your e-commerce marketplace with ease</p>
         </div>
 
@@ -41,26 +88,26 @@ function AdminDashboard() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <div className="bg-white rounded-2xl shadow-md p-6 border-l-4 border-blue-500">
             <p className="text-slate-600 text-sm font-semibold uppercase">Total Products</p>
-            <p className="text-3xl font-bold text-slate-900 mt-2">127</p>
-            <p className="text-green-600 text-xs mt-2">📈 +12 this week</p>
+            <p className="text-3xl font-bold text-slate-900 mt-2">{statsLoading ? "Loading..." : counts.products ?? "—"}</p>
+            <p className="text-green-600 text-xs mt-2">{statsError ? "" : "📈 +12 this week"}</p>
           </div>
 
           <div className="bg-white rounded-2xl shadow-md p-6 border-l-4 border-green-500">
             <p className="text-slate-600 text-sm font-semibold uppercase">Total Users</p>
-            <p className="text-3xl font-bold text-slate-900 mt-2">2,547</p>
-            <p className="text-green-600 text-xs mt-2">👥 +89 this week</p>
+            <p className="text-3xl font-bold text-slate-900 mt-2">{statsLoading ? "Loading..." : counts.users ?? "—"}</p>
+            <p className="text-green-600 text-xs mt-2">{statsError ? "" : "👥 +89 this week"}</p>
           </div>
 
           <div className="bg-white rounded-2xl shadow-md p-6 border-l-4 border-purple-500">
             <p className="text-slate-600 text-sm font-semibold uppercase">Active Sellers</p>
-            <p className="text-3xl font-bold text-slate-900 mt-2">24</p>
-            <p className="text-green-600 text-xs mt-2">🏪 +3 approved</p>
+            <p className="text-3xl font-bold text-slate-900 mt-2">{statsLoading ? "Loading..." : counts.sellers ?? "—"}</p>
+            <p className="text-green-600 text-xs mt-2">{statsError ? "" : "🏪 +3 approved"}</p>
           </div>
 
           <div className="bg-white rounded-2xl shadow-md p-6 border-l-4 border-orange-500">
             <p className="text-slate-600 text-sm font-semibold uppercase">Pending Orders</p>
-            <p className="text-3xl font-bold text-slate-900 mt-2">18</p>
-            <p className="text-orange-600 text-xs mt-2">⚠️ Needs attention</p>
+            <p className="text-3xl font-bold text-slate-900 mt-2">{statsLoading ? "Loading..." : counts.orders ?? "—"}</p>
+            <p className="text-orange-600 text-xs mt-2">{statsError ? "" : "⚠️ Needs attention"}</p>
           </div>
         </div>
 

@@ -8,6 +8,13 @@ import { useSearchParams, useRouter } from "next/navigation";
 import apiClient from "@/lib/api";
 import { products as localProducts } from "@/data/products";
 
+interface QuickBuyProduct {
+  id: string;
+  name: string;
+  price: number;
+  images?: string[];
+}
+
 const PAYMENT_METHODS = [
   { value: "cash_on_delivery", label: "Cash on delivery" },
   { value: "mobile_money", label: "M-Pesa" },
@@ -43,9 +50,11 @@ export default function CheckoutPage() {
     [items, shippingAddress, paymentMethod]
   );
 
+  const productId = searchParams.get("product");
+  const processedQuickBuyIds = useMemo(() => new Set<string>(), []);
+
   useEffect(() => {
-    const productId = searchParams.get("product");
-    if (!productId || items.length > 0) {
+    if (!productId || processedQuickBuyIds.has(productId)) {
       return;
     }
 
@@ -59,7 +68,7 @@ export default function CheckoutPage() {
       });
     };
 
-    (async () => {
+    const loadProduct = async () => {
       try {
         const res = await apiClient.get(`/products/${productId}`);
         const p = res.data.data;
@@ -83,16 +92,35 @@ export default function CheckoutPage() {
 
       try {
         const r = await fetch(`/products.json`);
-        const data = await r.json();
-        const p = (data || []).find((x: any) => x.id === productId);
-        if (p) {
-          addQuickBuyItem(p);
+        const data = (await r.json()) as unknown;
+
+        if (Array.isArray(data)) {
+          const p = data.find(
+            (x): x is QuickBuyProduct =>
+              typeof x === "object" &&
+              x !== null &&
+              "id" in x &&
+              typeof (x as Record<string, unknown>).id === "string" &&
+              (x as Record<string, unknown>).id === productId &&
+              "name" in x &&
+              typeof (x as Record<string, unknown>).name === "string" &&
+              "price" in x &&
+              typeof (x as Record<string, unknown>).price === "number"
+          );
+
+          if (p) {
+            addQuickBuyItem(p);
+          }
         }
       } catch (err) {
         console.error("Fallback product load failed", err);
       }
-    })();
-  }, [searchParams, items.length, addItem]);
+    };
+
+    loadProduct().finally(() => {
+      processedQuickBuyIds.add(productId);
+    });
+  }, [productId, addItem, processedQuickBuyIds]);
 
   const handleAddressChange = (field: string, value: string) => {
     setShippingAddress((prev) => ({ ...prev, [field]: value }));

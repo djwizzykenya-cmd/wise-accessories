@@ -1,5 +1,11 @@
+"use client";
+
+import Image from "next/image";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { useEffect, useState } from "react";
+import apiClient from "@/lib/api";
+import { products as localProducts } from "@/data/products";
+import NotFoundPage from "./not-found";
 
 interface Product {
   id: string;
@@ -12,43 +18,61 @@ interface Product {
   seller: { shopName: string };
 }
 
-import { products as localProducts } from "@/data/products";
+export default function ProductDetailPage({ params }: { params: { id: string } }) {
+  const [product, setProduct] = useState<Product | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
 
-async function getProduct(id: string) {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+  useEffect(() => {
+    let active = true;
 
-  try {
-    const res = await fetch(`${apiUrl}/products/${id}`, {
-      cache: "no-store"
-    });
+    const loadProduct = async () => {
+      setLoading(true);
+      setNotFound(false);
 
-    if (res.ok) {
-      const body = await res.json();
-      return body.data as Product;
-    }
-  } catch (error) {
-    console.warn("API product fetch failed, falling back to local product data", error);
+      try {
+        const response = await apiClient.get(`/products/${params.id}`);
+        const apiProduct = response.data?.data as Product | null;
+        if (active && apiProduct) {
+          setProduct(apiProduct);
+          setLoading(false);
+          return;
+        }
+      } catch (error) {
+        console.warn("Product API fetch failed, falling back to local product data", error);
+      }
+
+      const local = localProducts.find((item) => item.id === params.id);
+      if (!active) return;
+
+      if (local) {
+        setProduct(local as Product);
+      } else {
+        setNotFound(true);
+      }
+      setLoading(false);
+    };
+
+    loadProduct();
+
+    return () => {
+      active = false;
+    };
+  }, [params.id]);
+
+  if (loading) {
+    return (
+      <main className="min-h-screen bg-slate-50 py-16">
+        <div className="mx-auto max-w-4xl rounded-3xl bg-white p-10 shadow-xl text-center">
+          <p className="text-sm uppercase tracking-[0.24em] text-slate-500">Loading product</p>
+          <h1 className="mt-6 text-4xl font-bold text-slate-900">Please wait while we load the details</h1>
+        </div>
+      </main>
+    );
   }
 
-  const local = localProducts.find((product) => product.id === id);
-  if (!local) {
-    return null;
-  }
-
-  return {
-    ...local,
-    description: local.description,
-    stock: local.stock,
-    category: local.category,
-    seller: local.seller
-  } as Product;
-}
-
-export default async function ProductDetailPage({ params }: { params: { id: string } }) {
-  const product = await getProduct(params.id);
-
-  if (!product) {
-    notFound();
+  if (notFound || !product) {
+    return <NotFoundPage />;
   }
 
   const categoryName = typeof product.category === "string" ? product.category : product.category?.name;
@@ -71,16 +95,18 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
         <div className="grid gap-6 lg:grid-cols-[1.5fr_1fr]">
           <div className="rounded-3xl bg-white p-6 shadow-sm">
             <div className="overflow-hidden rounded-3xl bg-slate-100">
-              <img
+              <Image
                 src={product.images?.[0] || "/placeholder.png"}
                 alt={product.name}
+                width={1080}
+                height={720}
                 className="h-[420px] w-full object-cover"
               />
             </div>
             <div className="mt-6 grid gap-4 sm:grid-cols-2">
               {product.images?.slice(1, 5).map((src, index) => (
                 <div key={index} className="overflow-hidden rounded-3xl bg-slate-100">
-                  <img src={src} alt={`${product.name} ${index + 2}`} className="h-24 w-full object-cover sm:h-32" />
+                  <Image src={src} alt={`${product.name} ${index + 2}`} width={280} height={128} className="h-24 w-full object-cover sm:h-32" />
                 </div>
               ))}
             </div>
@@ -93,7 +119,9 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
                   <p className="text-sm uppercase tracking-[0.24em] text-slate-500">Category</p>
                   <p className="mt-2 text-lg font-semibold text-slate-900">{categoryName || "Parts"}</p>
                 </div>
-                <div className="rounded-full bg-red-600 px-4 py-2 text-sm font-semibold text-white">{product.stock > 0 ? "In stock" : "Out of stock"}</div>
+                <div className={`rounded-full px-4 py-2 text-sm font-semibold text-white ${product.stock > 0 ? "bg-red-600" : "bg-slate-400"}`}>
+                  {product.stock > 0 ? "In stock" : "Out of stock"}
+                </div>
               </div>
 
               <div className="mt-6 space-y-3">
@@ -111,11 +139,13 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
               </div>
 
               <Link
-                            href={`/checkout?product=${product.id}`}
-                            className="w-full inline-flex items-center justify-center rounded-3xl bg-red-600 px-6 py-4 text-sm font-semibold text-white transition hover:bg-red-700"
-                          >
-                            Buy now
-                          </Link>
+                href={product.stock > 0 ? `/checkout?product=${product.id}` : "/products"}
+                className={`w-full inline-flex items-center justify-center rounded-3xl px-6 py-4 text-sm font-semibold text-white transition ${
+                  product.stock > 0 ? "bg-red-600 hover:bg-red-700" : "bg-slate-400 cursor-not-allowed"
+                }`}
+              >
+                {product.stock > 0 ? "Buy now" : "Out of stock"}
+              </Link>
             </div>
 
             <div className="rounded-3xl bg-white p-6 shadow-sm">

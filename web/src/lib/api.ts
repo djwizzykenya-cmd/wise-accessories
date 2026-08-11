@@ -63,7 +63,9 @@ const buildDemoUser = (user: DemoUser) => ({
   userType: user.userType
 });
 
-const demoProducts = [
+const DEMO_PRODUCTS_KEY = "wise-accessories-demo-products";
+
+const initialDemoProducts = [
   {
     id: "prod-1",
     name: "Motorcycle Engine Piston",
@@ -86,6 +88,40 @@ const demoProducts = [
   }
 ];
 
+let demoProducts = [...initialDemoProducts];
+
+const loadPersistedDemoProducts = () => {
+  if (typeof window === "undefined") {
+    return [...initialDemoProducts];
+  }
+
+  try {
+    const saved = window.localStorage.getItem(DEMO_PRODUCTS_KEY);
+    if (!saved) {
+      return [...initialDemoProducts];
+    }
+    return JSON.parse(saved) as typeof demoProducts;
+  } catch {
+    return [...initialDemoProducts];
+  }
+};
+
+const persistDemoProducts = (products: typeof demoProducts) => {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(DEMO_PRODUCTS_KEY, JSON.stringify(products));
+  } catch {
+    // ignore storage errors
+  }
+};
+
+if (typeof window !== "undefined") {
+  demoProducts = loadPersistedDemoProducts();
+}
+
 const demoCategories = [
   { id: "cat-engine", name: "Engine Parts", slug: "engine-parts" },
   { id: "cat-brakes", name: "Brakes", slug: "brakes" },
@@ -107,7 +143,7 @@ const demoOrders = [
   { id: "order-1", orderNumber: "WIS-001", customer: "Jane Doe", email: "customer@wise.test", itemsCount: 2, totalPrice: 15500, status: "delivered", createdAt: "2026-03-15" }
 ];
 
-const fallbackResponse = (status: number, data: any) => ({
+const fallbackResponse = <T,>(status: number, data: T) => ({
   data: {
     success: true,
     data
@@ -135,21 +171,35 @@ apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
     const url = (error?.config?.url || "").replace(/^\//, "");
+    const requestPath = url.split("?")[0];
     const method = (error?.config?.method || "get").toLowerCase();
+    const status = error.response?.status;
+    const serverError = !error.response || status >= 500;
 
-    if (url === "auth/login" && method === "post") {
+    if (status === 401) {
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("token");
+        localStorage.removeItem("user");
+        window.location.href = "/auth";
+      }
+      return Promise.reject(error);
+    }
+
+    if (requestPath === "auth/login" && method === "post" && serverError) {
       const { email, password } = error.config.data ? JSON.parse(error.config.data) : {};
       const user = demoUsers[email as keyof typeof demoUsers];
       if (user && demoPasswordByEmail[email as keyof typeof demoPasswordByEmail] === password) {
-        return Promise.resolve(fallbackResponse(200, {
-          token: createDemoToken(email),
-          user: buildDemoUser(user)
-        }));
+        return Promise.resolve(
+          fallbackResponse(200, {
+            token: createDemoToken(email),
+            user: buildDemoUser(user)
+          })
+        );
       }
       return Promise.reject(new Error("Invalid credentials"));
     }
 
-    if (url === "auth/me" && method === "get") {
+    if (requestPath === "auth/me" && method === "get" && serverError) {
       const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
       if (token) {
         const email = token.replace("demo-", "");
@@ -161,66 +211,104 @@ apiClient.interceptors.response.use(
       return Promise.reject(new Error("Not authenticated"));
     }
 
-    if (url === "products" && method === "get") {
+    if (requestPath === "products" && method === "get" && serverError) {
       return Promise.resolve(fallbackResponse(200, demoProducts));
     }
 
-    if (url === "products/categories" && method === "get") {
+    if (requestPath === "products/admin" && method === "get" && serverError) {
+      const params = error.config.params || {};
+      const limit = Number(params.limit || 100);
+      return Promise.resolve(
+        fallbackResponse(200, {
+          data: demoProducts.slice(0, limit),
+          meta: {
+            total: demoProducts.length,
+            page: 1,
+            limit,
+            totalPages: Math.ceil(demoProducts.length / limit)
+          }
+        })
+      );
+    }
+
+    if (requestPath === "products/categories" && method === "get" && serverError) {
       return Promise.resolve(fallbackResponse(200, demoCategories));
     }
 
-    if (url === "users" && method === "get") {
+    if (url === "users" && method === "get" && serverError) {
       return Promise.resolve(fallbackResponse(200, demoUsersList));
     }
 
-    if (url === "sellers" && method === "get") {
+    if (url === "sellers" && method === "get" && serverError) {
       return Promise.resolve(fallbackResponse(200, demoSellers));
     }
 
-    if (url === "orders" && method === "get") {
+    if (url === "orders" && method === "get" && serverError) {
       return Promise.resolve(fallbackResponse(200, demoOrders));
     }
 
-    if (url.startsWith("products/") && method === "get") {
+    if (url.startsWith("products/") && method === "get" && serverError) {
       const id = url.split("/")[1];
       const product = demoProducts.find((p) => p.id === id);
-      return Promise.resolve(fallbackResponse(200, product || demoProducts[0]));
+      if (product) {
+        return Promise.resolve(fallbackResponse(200, product));
+      }
+      return Promise.reject(error);
     }
 
-    if (url === "products" && (method === "post" || method === "put")) {
+    if (url === "products" && (method === "post" || method === "put") && serverError) {
       const payload = error.config.data ? JSON.parse(error.config.data) : {};
-      const created = { id: `prod-${Date.now()}`, ...payload, category: demoCategories.find((c) => c.id === payload.categoryId) || demoCategories[0], seller: { shopName: "Wise Accessories Store" } };
+      const created = {
+        id: `prod-${Date.now()}`,
+        ...payload,
+        category: demoCategories.find((c) => c.id === payload.categoryId) || demoCategories[0],
+        seller: { shopName: "Wise Accessories Store" }
+      };
       demoProducts.unshift(created);
+      persistDemoProducts(demoProducts);
       return Promise.resolve(fallbackResponse(201, created));
     }
 
-    if (url.startsWith("products/") && method === "put") {
+    if (url.startsWith("products/") && method === "put" && serverError) {
       const id = url.split("/")[1];
       const payload = error.config.data ? JSON.parse(error.config.data) : {};
       const index = demoProducts.findIndex((product) => product.id === id);
       if (index >= 0) {
-        demoProducts[index] = { ...demoProducts[index], ...payload, category: demoCategories.find((c) => c.id === payload.categoryId) || demoProducts[index].category, seller: demoProducts[index].seller };
+        demoProducts[index] = {
+          ...demoProducts[index],
+          ...payload,
+          category: demoCategories.find((c) => c.id === payload.categoryId) || demoProducts[index].category,
+          seller: demoProducts[index].seller
+        };
+        persistDemoProducts(demoProducts);
         return Promise.resolve(fallbackResponse(200, demoProducts[index]));
       }
     }
 
-    if (url.startsWith("products/") && method === "delete") {
+    if (url.startsWith("products/") && method === "delete" && serverError) {
       const id = url.split("/")[1];
       const index = demoProducts.findIndex((product) => product.id === id);
       if (index >= 0) {
         demoProducts.splice(index, 1);
+        persistDemoProducts(demoProducts);
       }
       return Promise.resolve(fallbackResponse(200, { success: true }));
     }
 
-    if (url === "orders" && method === "post") {
+    if (url === "orders" && method === "post" && serverError) {
       const payload = error.config.data ? JSON.parse(error.config.data) : {};
-      const order = { id: `order-${Date.now()}`, orderNumber: `WIS-${Date.now().toString().slice(-3)}`, ...payload, status: "pending", createdAt: new Date().toISOString().slice(0, 10) };
+      const order = {
+        id: `order-${Date.now()}`,
+        orderNumber: `WIS-${Date.now().toString().slice(-3)}`,
+        ...payload,
+        status: "pending",
+        createdAt: new Date().toISOString().slice(0, 10)
+      };
       demoOrders.unshift(order);
       return Promise.resolve(fallbackResponse(201, order));
     }
 
-    if (url.startsWith("orders/") && method === "put") {
+    if (url.startsWith("orders/") && method === "put" && serverError) {
       const id = url.split("/")[1];
       const payload = error.config.data ? JSON.parse(error.config.data) : {};
       const index = demoOrders.findIndex((order) => order.id === id);
@@ -230,16 +318,8 @@ apiClient.interceptors.response.use(
       }
     }
 
-    if (url.startsWith("orders/") && method === "post") {
+    if (url.startsWith("orders/") && method === "post" && serverError) {
       return Promise.resolve(fallbackResponse(200, { success: true }));
-    }
-
-    if (error.response?.status === 401) {
-      if (typeof window !== "undefined") {
-        localStorage.removeItem("token");
-        localStorage.removeItem("user");
-        window.location.href = "/auth";
-      }
     }
 
     return Promise.reject(error);

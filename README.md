@@ -156,6 +156,48 @@ Full API documentation available at `/docs` once backend is running.
 - **Database**: AWS RDS PostgreSQL
 - **Cache**: Redis Cloud
 
+### Vercel Deployment (Web)
+
+Quick steps to deploy the `web` Next.js app to Vercel:
+
+1. Create a Vercel project and connect your Git repository.
+2. In Vercel project settings -> Environment Variables, add the following keys:
+
+	- `NEXT_PUBLIC_API_URL` – the full URL to your backend API (e.g. `https://api.your-domain.com`).
+	- `NEXT_PUBLIC_STRIPE_KEY` – (if using Stripe in web build)
+	- Any other runtime secrets required for the web client.
+
+3. Vercel build settings (the repo contains `vercel.json` so the defaults should work):
+
+	- Install command: `npm install --workspaces=false --prefix web`
+	- Build command: `npm run build --prefix web`
+	- Output directory: `web/.next`
+
+4. If you need server-side API routes, deploy the `backend` separately (e.g. Railway, ECS, or DigitalOcean) and set `NEXT_PUBLIC_API_URL` to its URL.
+
+5. After setting environment variables, trigger a deployment from the Vercel UI or push to the connected branch.
+
+Notes:
+
+- The Next.js rewrites used for local development (proxy to `http://127.0.0.1:5000`) are only applied when `NEXT_PUBLIC_API_URL` is unset and `NODE_ENV` is `development`. For production on Vercel, set `NEXT_PUBLIC_API_URL` so the web app talks directly to your backend.
+- Use the Vercel secrets management UI for sensitive values when possible.
+
+### GitHub Actions (CI & Deploy)
+
+This repository includes two GitHub Actions workflows to help keep the `web` app online:
+
+- `.github/workflows/web-ci.yml` — runs `npm run build --prefix web` on pushes and PRs to `main`/`master`.
+- `.github/workflows/deploy-vercel.yml` — deploys the `web` app to Vercel on pushes to `main`/`master` using the Vercel CLI.
+
+Before using the deploy workflow, add the following GitHub repository secrets (Repository → Settings → Secrets & variables → Actions):
+
+ - `VERCEL_TOKEN` — your Vercel personal token (create at https://vercel.com/account/tokens).
+ - `VERCEL_ORG_ID` — your Vercel organization id (optional but recommended).
+ - `VERCEL_PROJECT_ID` — your Vercel project id (optional but recommended).
+
+The deploy workflow uses the Vercel CLI and the token to trigger a production deployment of the `web` folder. If you'd prefer Vercel's native Git integration instead of the CLI, you can skip adding these secrets and connect the repository through the Vercel dashboard.
+
+
 ## Contributing
 
 See CONTRIBUTING.md for guidelines.

@@ -209,32 +209,88 @@ router.get(
 );
 
 router.get(
-  "/categories",
-  asyncHandler(async (_req, res) => {
-    const categories = await prisma.category.findMany();
-    res.json({ success: true, data: categories });
+  "/admin",
+  authenticate,
+  authorize(UserType.ADMIN, UserType.SELLER),
+  asyncHandler(async (req: any, res) => {
+    const page = Number(req.query.page || 1);
+    const limit = Number(req.query.limit || 100);
+    const search = String(req.query.search || "").trim();
+    const category = String(req.query.category || "").trim();
+    const sellerId = String(req.query.sellerId || "").trim();
+    const activeFilter = req.query.active?.toString();
+
+    const where: any = {
+      ...(search
+        ? {
+            OR: [
+              { name: { contains: search, mode: "insensitive" } },
+              { description: { contains: search, mode: "insensitive" } }
+            ]
+          }
+        : {}),
+      ...(category
+        ? {
+            category: {
+              slug: category
+            }
+          }
+        : {}),
+      ...(sellerId ? { sellerId } : {})
+    };
+
+    if (activeFilter === "true") {
+      where.isActive = true;
+    } else if (activeFilter === "false") {
+      where.isActive = false;
+    }
+
+    const total = await prisma.product.count({ where });
+    const products = await prisma.product.findMany({
+      where,
+      skip: (page - 1) * limit,
+      take: limit,
+      include: {
+        seller: {
+          select: {
+            id: true,
+            shopName: true
+          }
+        },
+        category: true
+      },
+      orderBy: {
+        createdAt: "desc"
+      }
+    });
+
+    res.json({
+      success: true,
+      data: products.map((product) => ({
+        ...product,
+        images: parseImages(product.images)
+      })),
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit)
+      }
+    });
   })
 );
 
 router.get(
-  "/sellers",
-  authenticate,
-  authorize(UserType.ADMIN),
+  "/categories",
   asyncHandler(async (_req, res) => {
-    const sellers = await prisma.seller.findMany({
-      include: {
-        user: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            email: true
-          }
-        }
-      }
+    const categories = await prisma.category.findMany({
+      orderBy: { name: "asc" }
     });
 
-    res.json({ success: true, data: sellers });
+    res.json({
+      success: true,
+      data: categories
+    });
   })
 );
 
@@ -306,7 +362,7 @@ router.post(
   "/",
   authenticate,
   authorize(UserType.SELLER, UserType.ADMIN),
-  asyncHandler(async (req, res) => {
+  asyncHandler(async (req: any, res) => {
     const { name, description, categoryId, price, stock, images, sellerId } = req.body;
 
     if (!name || !categoryId || !price || !stock) {
@@ -314,7 +370,7 @@ router.post(
     }
 
     let seller = null as any;
-    const currentUser = (req as any).user;
+    const currentUser = req.user;
     if (currentUser.userType === UserType.SELLER) {
       seller = await prisma.seller.findUnique({
         where: {
@@ -356,6 +412,70 @@ router.post(
       data: {
         ...product,
         images: parseImages(product.images)
+      }
+    });
+  })
+);
+
+router.put(
+  "/:id",
+  authenticate,
+  authorize(UserType.SELLER, UserType.ADMIN),
+  asyncHandler(async (req: any, res) => {
+    const product = await prisma.product.findUnique({ where: { id: req.params.id } });
+    if (!product) {
+      throw new AppError("Product not found", 404);
+    }
+
+    if (req.user.userType === UserType.SELLER) {
+      const seller = await prisma.seller.findUnique({
+        where: {
+          userId: req.user.id
+        }
+      });
+      if (!seller || seller.id !== product.sellerId) {
+        throw new AppError("Forbidden", 403);
+      }
+    }
+
+    const { name, description, categoryId, price, stock, images, isActive } = req.body;
+    const updatedProduct = await prisma.product.update({
+      where: { id: req.params.id },
+      data: {
+        name: name ?? product.name,
+        description: description ?? product.description,
+        categoryId: categoryId ?? product.categoryId,
+        price: price === undefined ? product.price : Number(price),
+        stock: stock === undefined ? product.stock : Number(stock),
+        images: JSON.stringify(
+          images !== undefined
+            ? Array.isArray(images)
+              ? images
+              : []
+            : parseImages(product.images)
+        ),
+        ...(isActive !== undefined ? { isActive: Boolean(isActive) } : {})
+      }
+    });
+
+    const updatedProductWithRelations = await prisma.product.findUnique({
+      where: { id: updatedProduct.id },
+      include: {
+        seller: {
+          select: {
+            id: true,
+            shopName: true
+          }
+        },
+        category: true
+      }
+    });
+
+    res.json({
+      success: true,
+      data: {
+        ...updatedProductWithRelations,
+        images: parseImages(updatedProductWithRelations?.images)
       }
     });
   })

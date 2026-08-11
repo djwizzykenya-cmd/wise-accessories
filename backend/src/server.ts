@@ -6,6 +6,8 @@ import healthRoutes from "./routes/health";
 import authRoutes from "./routes/auth";
 import productRoutes from "./routes/products";
 import orderRoutes from "./routes/orders";
+import userRoutes from "./routes/users";
+import sellerRoutes from "./routes/sellers";
 import prisma from "./prisma";
 
 const app = express();
@@ -19,6 +21,8 @@ app.use(express.urlencoded({ extended: true }));
 app.use("/api", healthRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/products", productRoutes);
+app.use("/api/users", userRoutes);
+app.use("/api/sellers", sellerRoutes);
 app.use("/api/orders", orderRoutes);
 
 // Health check at root

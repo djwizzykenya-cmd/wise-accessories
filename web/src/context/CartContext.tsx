@@ -31,13 +31,44 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({
   useEffect(() => {
     const stored = localStorage.getItem(CART_STORAGE_KEY);
     if (stored) {
-      setItems(JSON.parse(stored));
+      try {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          setItems(parsed);
+        }
+      } catch (e) {
+        console.warn("Failed to parse stored cart", e);
+      }
     }
   }, []);
 
   useEffect(() => {
     localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(items));
   }, [items]);
+
+  useEffect(() => {
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key !== CART_STORAGE_KEY) {
+        return;
+      }
+
+      if (event.newValue) {
+        try {
+          const nextItems = JSON.parse(event.newValue);
+          if (Array.isArray(nextItems)) {
+            setItems(nextItems);
+          }
+        } catch (e) {
+          console.warn("Failed to parse cart from storage event", e);
+        }
+      } else {
+        setItems([]);
+      }
+    };
+
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
+  }, []);
 
   const addItem = (item: CartItem) => {
     setItems((prev) => {

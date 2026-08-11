@@ -12,9 +12,9 @@ interface Order {
   customer: string;
   email: string;
   items: number;
-  total: number;
+  total?: number;
   status: "pending" | "processing" | "shipped" | "delivered" | "cancelled";
-  createdAt: string;
+  createdAt?: string;
 }
 
 function AdminOrdersContent() {
@@ -33,9 +33,10 @@ function AdminOrdersContent() {
     }
 
     const loadOrders = async () => {
-      setLoading(false);
+      setLoading(true);
       try {
-        const response = await apiClient.get("/orders");
+        const query = filterStatus !== "all" ? `?status=${encodeURIComponent(filterStatus)}` : "";
+        const response = await apiClient.get(`/orders${query}`);
         setOrders(response.data.data || []);
       } catch (err) {
         console.error(err);
@@ -46,13 +47,15 @@ function AdminOrdersContent() {
           { id: "3", orderNumber: "WIS-003", customer: "Mike Johnson", email: "mike@example.com", items: 2, total: 8900, status: "processing", createdAt: "2026-03-17" },
           { id: "4", orderNumber: "WIS-004", customer: "Sarah Wilson", email: "sarah@example.com", items: 4, total: 22300, status: "pending", createdAt: "2026-03-18" },
           { id: "5", orderNumber: "WIS-005", customer: "Tom Brown", email: "tom@example.com", items: 1, total: 3200, status: "delivered", createdAt: "2026-03-14" },
-          { id: "6", orderNumber: "WIS-006", customer: "Emily Davis", email: "emily@example.com", items: 2, total: 12100, status: "cancelled", createdAt: "2026-03-13" },
+          { id: "6", orderNumber: "WIS-006", customer: "Emily Davis", email: "emily@example.com", items: 2, total: 12100, status: "cancelled", createdAt: "2026-03-13" }
         ]);
+      } finally {
+        setLoading(false);
       }
     };
 
     loadOrders();
-  }, [isReady, user, router]);
+  }, [isReady, user, router, filterStatus]);
 
   const filteredOrders = orders.filter((o) => {
     if (filterStatus === "all") return true;
@@ -176,8 +179,8 @@ function AdminOrdersContent() {
                         <p className="text-sm text-slate-600 mt-2">{order.customer} • {order.email}</p>
                         <div className="flex items-center gap-6 mt-3 text-sm text-slate-600">
                           <span>📦 {order.items} items</span>
-                          <span>💰 KES {order.total.toLocaleString()}</span>
-                          <span>📅 {new Date(order.createdAt).toLocaleDateString()}</span>
+                          <span>💰 KES {(order.total ?? 0).toLocaleString()}</span>
+                          <span>📅 {order.createdAt ? new Date(order.createdAt).toLocaleDateString() : "Unknown date"}</span>
                         </div>
                       </div>
                       <div className="flex flex-col gap-2 sm:items-end">
@@ -203,7 +206,7 @@ function AdminOrdersContent() {
             {/* Stats */}
             <div className="grid grid-cols-3 gap-4 pt-6 border-t border-slate-200">
               <div className="text-center">
-                <p className="text-2xl font-bold text-slate-900">KES {orders.reduce((sum, o) => sum + (o.status !== "cancelled" ? o.total : 0), 0).toLocaleString()}</p>
+                <p className="text-2xl font-bold text-slate-900">KES {orders.reduce((sum, o) => sum + (o.status !== "cancelled" ? (o.total ?? 0) : 0), 0).toLocaleString()}</p>
                 <p className="text-sm text-slate-500 mt-1">💰 Total Revenue</p>
               </div>
               <div className="text-center">

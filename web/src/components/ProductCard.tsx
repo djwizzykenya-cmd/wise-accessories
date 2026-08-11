@@ -1,4 +1,5 @@
 import React from "react";
+import Image from "next/image";
 import Link from "next/link";
 
 interface Props {
@@ -16,9 +17,11 @@ export default function ProductCard({ id, name, price, images = [], seller, cate
     <div className="group flex h-full flex-col rounded-[28px] bg-white shadow-sm ring-1 ring-slate-200 transition hover:-translate-y-1 hover:shadow-lg">
       <Link href={`/products/${id}`} className="block rounded-[28px]">
         <div className="relative overflow-hidden rounded-t-[28px] bg-slate-100">
-          <img
+          <Image
             src={images[0] || "/placeholder-product.svg"}
             alt={name}
+            width={600}
+            height={336}
             className="h-56 w-full object-cover transition duration-300 group-hover:scale-105"
           />
           <div className="absolute left-3 top-3 rounded-full bg-red-600 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.25em] text-white shadow-lg">

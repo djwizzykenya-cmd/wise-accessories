@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import ProductCard from "@/components/ProductCard";
 import { useAuth } from "@/context/AuthContext";
+import apiClient from "@/lib/api";
 
 interface Product {
   id: string;
@@ -81,7 +82,7 @@ const FALLBACK_PRODUCTS: Product[] = [
 
 export default function HomePage() {
   const { user } = useAuth();
-  const [products, setProducts] = useState<Product[]>(FALLBACK_PRODUCTS);
+  const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
   const [countdown, setCountdown] = useState<CountdownTime>({ hours: 1, minutes: 58, seconds: 32 });
 
@@ -112,28 +113,23 @@ export default function HomePage() {
 
   useEffect(() => {
     let isMounted = true;
-    const controller = new AbortController();
-    const timeoutId = window.setTimeout(() => controller.abort(), 4000);
 
     const load = async () => {
       setLoading(true);
       try {
-        const response = await fetch("/api/products?limit=12", {
-          cache: "no-store",
-          signal: controller.signal,
+        const response = await apiClient.get("/products?limit=12", {
+          timeout: 2500
         });
-
-        if (!response.ok) {
-          throw new Error(`Products request failed with ${response.status}`);
-        }
-
-        const data = await response.json();
-        if (isMounted && Array.isArray(data?.data) && data.data.length > 0) {
-          setProducts(data.data);
+        const data = response.data?.data;
+        if (isMounted && Array.isArray(data)) {
+          setProducts(data);
+        } else if (isMounted) {
+          setProducts(FALLBACK_PRODUCTS);
         }
       } catch (err) {
-        if ((err as Error).name !== "AbortError") {
-          console.error("Failed to load products", err);
+        console.error("Failed to load products", err);
+        if (isMounted) {
+          setProducts(FALLBACK_PRODUCTS);
         }
       } finally {
         if (isMounted) {
@@ -146,8 +142,6 @@ export default function HomePage() {
 
     return () => {
       isMounted = false;
-      window.clearTimeout(timeoutId);
-      controller.abort();
     };
   }, []);
 

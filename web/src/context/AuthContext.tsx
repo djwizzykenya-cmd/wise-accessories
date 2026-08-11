@@ -1,13 +1,14 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect } from "react";
+import type { User } from "@wise-accessories/shared";
 import apiClient from "@/lib/api";
 
 interface AuthContextType {
   token: string | null;
-  user: any | null;
+  user: User | null;
   isReady: boolean;
-  login: (email: string, password: string) => Promise<any>;
+  login: (email: string, password: string) => Promise<User>;
   logout: () => void;
   isAuthenticated: boolean;
 }
@@ -18,7 +19,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   children
 }) => {
   const [token, setToken] = useState<string | null>(null);
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
@@ -33,13 +34,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     setIsReady(true);
   }, []);
 
-  const login = async (email: string, password: string) => {
+  const login = async (email: string, password: string): Promise<User> => {
     const response = await apiClient.post("/auth/login", {
       email,
       password
     });
 
-    const { token: authToken, user: authUser } = response.data.data;
+    const { token: authToken, user: authUser } = response.data.data as {
+      token: string;
+      user: User;
+    };
     setToken(authToken);
     setUser(authUser);
     localStorage.setItem("token", authToken);

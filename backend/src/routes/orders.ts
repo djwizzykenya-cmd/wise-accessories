@@ -3,6 +3,7 @@ import bcrypt from "bcrypt";
 import { randomUUID } from "crypto";
 import prisma from "../prisma";
 import { asyncHandler, AppError } from "../middleware/errorHandler";
+import { authenticate, authorize } from "../middleware/auth";
 import { OrderStatus, PaymentMethod, PaymentStatus, UserType } from "@wise-accessories/shared";
 
 const router = express.Router();
@@ -12,10 +13,71 @@ const IN_MEMORY_ORDERS: Map<string, any> = new Map();
 const IN_MEMORY_PAYMENTS: Map<string, any> = new Map();
 const createGuestCustomer = async (_guest: { name?: string; email?: string; phone?: string }) => {
   // For robustness during local development when the database may be down,
-  // return a lightweight in-memory customer. This avoids Prisma initialization
-  // errors while still allowing the frontend to place demo orders.
+  // return a lightweight fallback customer structure.
   return { id: randomUUID(), userId: null } as any;
 };
+
+router.get(
+  "/",
+  authenticate,
+  authorize(UserType.ADMIN),
+  asyncHandler(async (req, res) => {
+    const statusFilter = String(req.query.status || "").trim().toLowerCase();
+    const where: any = {};
+    if (statusFilter && statusFilter !== "all") {
+      where.status = statusFilter;
+    }
+
+    try {
+      const orders = await prisma.order.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        include: {
+          customer: {
+            include: {
+              user: {
+                select: {
+                  firstName: true,
+                  lastName: true,
+                  email: true
+                }
+              }
+            }
+          },
+          items: true
+        }
+      });
+
+      const payload = orders.map((order) => ({
+        id: order.id,
+        orderNumber: order.id,
+        customer: order.customer?.user
+          ? `${order.customer.user.firstName} ${order.customer.user.lastName}`.trim()
+          : "Guest",
+        email: order.customer?.user?.email || "guest@example.com",
+        items: (order as any).items?.length ?? 0,
+        total: order.totalAmount,
+        status: String(order.status).toLowerCase(),
+        createdAt: order.createdAt
+      }));
+
+      return res.json({ success: true, data: payload });
+    } catch (err) {
+      const fallbackOrders = Array.from(IN_MEMORY_ORDERS.values()).map((order) => ({
+        id: order.id,
+        orderNumber: order.id,
+        customer: order.customer?.name || "Guest",
+        email: order.customer?.email || "guest@example.com",
+        items: order.items?.length ?? 0,
+        total: order.totalAmount,
+        status: order.status,
+        createdAt: order.createdAt
+      }));
+
+      return res.json({ success: true, data: fallbackOrders });
+    }
+  })
+);
 
 router.post(
   "/",

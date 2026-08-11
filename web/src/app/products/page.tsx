@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import apiClient from "@/lib/api";
@@ -46,7 +47,7 @@ const FALLBACK_PRODUCTS: Product[] = [
 ];
 
 export default function ProductsPage() {
-  const [products, setProducts] = useState<Product[]>(FALLBACK_PRODUCTS);
+  const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -54,8 +55,10 @@ export default function ProductsPage() {
       try {
         const response = await apiClient.get("/products?limit=12");
         const data = response.data?.data;
-        if (Array.isArray(data) && data.length > 0) {
+        if (Array.isArray(data)) {
           setProducts(data);
+        } else {
+          setProducts(FALLBACK_PRODUCTS);
         }
       } catch (error) {
         console.error(error);
@@ -90,9 +93,11 @@ export default function ProductsPage() {
             {products.map((product) => (
               <Link key={product.id} href={`/products/${product.id}`} className="group flex h-full flex-col rounded-3xl border border-slate-200 bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-lg">
                 <div className="h-56 overflow-hidden rounded-3xl bg-slate-100">
-                  <img
+                  <Image
                     src={product.images?.[0] || "/placeholder.png"}
                     alt={product.name}
+                    width={560}
+                    height={224}
                     className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
                   />
                 </div>
