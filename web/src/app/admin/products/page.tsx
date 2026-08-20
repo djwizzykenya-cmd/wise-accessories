@@ -93,6 +93,29 @@ function AdminProductsContent() {
     window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
   };
 
+  const normalizeProduct = (product: any): Product => {
+    const category =
+      product?.category && typeof product.category === "object"
+        ? product.category
+        : categories.find((item) => item.id === product?.categoryId || item.id === product?.category?.id) || {
+            id: product?.categoryId || "uncategorized",
+            name: "Uncategorized",
+            slug: "uncategorized"
+          };
+
+    const seller =
+      product?.seller && typeof product.seller === "object"
+        ? product.seller
+        : { shopName: "Wise Accessories Store" };
+
+    return {
+      ...product,
+      images: Array.isArray(product?.images) ? product.images : [],
+      category,
+      seller
+    };
+  };
+
   const handleCancel = () => {
     setEditingId(null);
     setFormState({
@@ -186,14 +209,14 @@ function AdminProductsContent() {
 
       if (editingId) {
         const response = await apiClient.put(`/products/${editingId}`, payload);
-        setProducts((prev) =>
-          prev.map((p) => (p.id === editingId ? response.data.data : p))
-        );
+        const updated = normalizeProduct(response.data.data);
+        setProducts((prev) => prev.map((p) => (p.id === editingId ? updated : p)));
         setSuccess("Product updated successfully.");
         setTimeout(handleCancel, 1200);
       } else {
         const response = await apiClient.post("/products", payload);
-        setProducts((prev) => [response.data.data, ...prev]);
+        const created = normalizeProduct(response.data.data);
+        setProducts((prev) => [created, ...prev]);
         setSuccess("Product added successfully.");
         setFormState({
           name: "",

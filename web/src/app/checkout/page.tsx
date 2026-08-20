@@ -50,7 +50,7 @@ export default function CheckoutPage() {
     [items, shippingAddress, paymentMethod]
   );
 
-  const productId = searchParams.get("product");
+  const productId = searchParams?.get("product") ?? null;
   const processedQuickBuyIds = useMemo(() => new Set<string>(), []);
 
   useEffect(() => {

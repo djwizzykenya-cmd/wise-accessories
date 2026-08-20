@@ -13,7 +13,7 @@ export default function PaymentPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const orderId = searchParams.get("orderId") || (typeof window !== "undefined" ? localStorage.getItem("currentOrderId") : null);
+  const orderId = searchParams?.get("orderId") || (typeof window !== "undefined" ? localStorage.getItem("currentOrderId") : null);
 
   useEffect(() => {
     try {

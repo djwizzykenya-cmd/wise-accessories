@@ -422,6 +422,15 @@ router.post(
         stock: Number(stock),
         images: JSON.stringify(Array.isArray(images) ? images : []),
         isActive: true
+      },
+      include: {
+        seller: {
+          select: {
+            id: true,
+            shopName: true
+          }
+        },
+        category: true
       }
     });
 
