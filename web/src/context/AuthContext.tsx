@@ -1,14 +1,27 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect } from "react";
-import type { User } from "@wise-accessories/shared";
 import apiClient from "@/lib/api";
+
+export interface AuthUser {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  name: string;
+  phone?: string;
+  userType: "admin" | "seller" | "customer";
+  isActive?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+  [key: string]: unknown;
+}
 
 interface AuthContextType {
   token: string | null;
-  user: User | null;
+  user: AuthUser | null;
   isReady: boolean;
-  login: (email: string, password: string) => Promise<User>;
+  login: (email: string, password: string) => Promise<AuthUser>;
   logout: () => void;
   isAuthenticated: boolean;
 }
@@ -19,7 +32,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   children
 }) => {
   const [token, setToken] = useState<string | null>(null);
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
@@ -34,7 +47,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     setIsReady(true);
   }, []);
 
-  const login = async (email: string, password: string): Promise<User> => {
+  const login = async (email: string, password: string): Promise<AuthUser> => {
     const response = await apiClient.post("/auth/login", {
       email,
       password
@@ -42,7 +55,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
     const { token: authToken, user: authUser } = response.data.data as {
       token: string;
-      user: User;
+      user: AuthUser;
     };
     setToken(authToken);
     setUser(authUser);

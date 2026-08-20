@@ -1,0 +1,25 @@
+name: Deploy Web to Vercel
+
+on:
+  push:
+    branches: ["main", "master"]
+
+jobs:
+  vercel-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+      - name: Install Vercel CLI
+        run: npm install -g vercel@28
+      - name: Deploy to Vercel
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          # Deploy the `web` folder to Vercel using the provided token
+          vercel --cwd web --token $VERCEL_TOKEN --prod --confirm

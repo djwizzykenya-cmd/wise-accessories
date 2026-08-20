@@ -24,6 +24,24 @@ const parseImages = (images: unknown) => {
 
 const router = express.Router();
 
+const triggerFrontendRevalidation = async (paths: string[] = []) => {
+  const frontendUrl = process.env.FRONTEND_REVALIDATE_URL; // e.g. https://your-site.com
+  const secret = process.env.FRONTEND_REVALIDATE_SECRET || process.env.REVALIDATE_SECRET;
+  if (!frontendUrl || !secret) return;
+
+  try {
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore - global fetch may be available at runtime
+    await fetch(`${frontendUrl.replace(/\/+$/, "")}/api/revalidate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-revalidate-secret": secret },
+      body: JSON.stringify({ paths })
+    });
+  } catch (err) {
+    console.error("Failed to trigger frontend revalidation:", err);
+  }
+};
+
 const FALLBACK_PRODUCTS = [
   {
     id: "p1",
@@ -414,6 +432,8 @@ router.post(
         images: parseImages(product.images)
       }
     });
+    // Trigger frontend revalidation (best-effort, non-blocking)
+    void triggerFrontendRevalidation(["/products", `/products/${product.id}`]);
   })
 );
 
@@ -478,6 +498,8 @@ router.put(
         images: parseImages(updatedProductWithRelations?.images)
       }
     });
+    // Trigger frontend revalidation (best-effort, non-blocking)
+    void triggerFrontendRevalidation(["/products", `/products/${updatedProduct.id}`]);
   })
 );
 
@@ -504,6 +526,8 @@ router.delete(
 
     await prisma.product.delete({ where: { id: req.params.id } });
     res.json({ success: true });
+    // Trigger frontend revalidation (best-effort, non-blocking)
+    void triggerFrontendRevalidation(["/products"]);
   })
 );
 

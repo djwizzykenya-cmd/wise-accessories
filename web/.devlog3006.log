@@ -1,0 +1,318 @@
+
+> @wise-accessories/web@0.1.0 dev
+> next dev --hostname 127.0.0.1 --port 3006
+
+  ▲ Next.js 14.2.35
+  - Local:        http://127.0.0.1:3006
+  - Network:      http://127.0.0.1:3006
+
+ ✓ Starting...
+ ✓ Ready in 4.5s
+ ○ Compiling / ...
+ ✓ Compiled / in 13.3s (710 modules)
+ ✓ Compiled in 1003ms (319 modules)
+ HEAD / 200 in 100ms
+ GET / 200 in 271ms
+(node:106241) [DEP0060] DeprecationWarning: The `util._extend` API is deprecated. Please use Object.assign() instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+Failed to proxy http://127.0.0.1:5000/api/products?limit=12 Error: connect ECONNREFUSED 127.0.0.1:5000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1638:16)
+    at TCPConnectWrap.callbackTrampoline (node:internal/async_hooks:130:17) {
+  errno: -111,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 5000
+}
+Error: connect ECONNREFUSED 127.0.0.1:5000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1638:16)
+    at TCPConnectWrap.callbackTrampoline (node:internal/async_hooks:130:17) {
+  errno: -111,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 5000
+}
+ ○ Compiling /_error ...
+ ✓ Compiled /_error in 22.5s (929 modules)
+ GET / 200 in 254ms
+Failed to proxy http://127.0.0.1:5000/api/products?limit=12 Error: connect ECONNREFUSED 127.0.0.1:5000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1638:16)
+    at TCPConnectWrap.callbackTrampoline (node:internal/async_hooks:130:17) {
+  errno: -111,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 5000
+}
+Error: connect ECONNREFUSED 127.0.0.1:5000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1638:16)
+    at TCPConnectWrap.callbackTrampoline (node:internal/async_hooks:130:17) {
+  errno: -111,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 5000
+}
+Failed to proxy http://127.0.0.1:5000/api/products?limit=12 Error: connect ECONNREFUSED 127.0.0.1:5000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1638:16)
+    at TCPConnectWrap.callbackTrampoline (node:internal/async_hooks:130:17) {
+  errno: -111,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 5000
+}
+Error: connect ECONNREFUSED 127.0.0.1:5000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1638:16)
+    at TCPConnectWrap.callbackTrampoline (node:internal/async_hooks:130:17) {
+  errno: -111,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 5000
+}
+ ○ Compiling /auth ...
+ ✓ Compiled /auth in 1827ms (937 modules)
+Failed to proxy http://127.0.0.1:5000/api/auth/login Error: connect ECONNREFUSED 127.0.0.1:5000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1638:16)
+    at TCPConnectWrap.callbackTrampoline (node:internal/async_hooks:130:17) {
+  errno: -111,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 5000
+}
+Error: connect ECONNREFUSED 127.0.0.1:5000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1638:16)
+    at TCPConnectWrap.callbackTrampoline (node:internal/async_hooks:130:17) {
+  errno: -111,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 5000
+}
+ ○ Compiling /admin ...
+ ✓ Compiled /admin in 879ms (946 modules)
+ ○ Compiling /admin/products ...
+ ✓ Compiled /admin/products in 607ms (952 modules)
+Failed to proxy http://127.0.0.1:5000/api/products/admin?limit=100 Error: connect ECONNREFUSED 127.0.0.1:5000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1638:16)
+    at TCPConnectWrap.callbackTrampoline (node:internal/async_hooks:130:17) {
+  errno: -111,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 5000
+}
+Error: connect ECONNREFUSED 127.0.0.1:5000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1638:16)
+    at TCPConnectWrap.callbackTrampoline (node:internal/async_hooks:130:17) {
+  errno: -111,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 5000
+}
+Failed to proxy http://127.0.0.1:5000/api/products/categories Error: connect ECONNREFUSED 127.0.0.1:5000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1638:16)
+    at TCPConnectWrap.callbackTrampoline (node:internal/async_hooks:130:17) {
+  errno: -111,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 5000
+}
+Error: connect ECONNREFUSED 127.0.0.1:5000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1638:16)
+    at TCPConnectWrap.callbackTrampoline (node:internal/async_hooks:130:17) {
+  errno: -111,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 5000
+}
+Failed to proxy http://127.0.0.1:5000/api/products/admin?limit=100 Error: connect ECONNREFUSED 127.0.0.1:5000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1638:16)
+    at TCPConnectWrap.callbackTrampoline (node:internal/async_hooks:130:17) {
+  errno: -111,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 5000
+}
+Error: connect ECONNREFUSED 127.0.0.1:5000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1638:16)
+    at TCPConnectWrap.callbackTrampoline (node:internal/async_hooks:130:17) {
+  errno: -111,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 5000
+}
+Failed to proxy http://127.0.0.1:5000/api/products/categories Error: connect ECONNREFUSED 127.0.0.1:5000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1638:16)
+    at TCPConnectWrap.callbackTrampoline (node:internal/async_hooks:130:17) {
+  errno: -111,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 5000
+}
+Error: connect ECONNREFUSED 127.0.0.1:5000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1638:16)
+    at TCPConnectWrap.callbackTrampoline (node:internal/async_hooks:130:17) {
+  errno: -111,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 5000
+}
+Failed to proxy http://127.0.0.1:5000/api/products Error: connect ECONNREFUSED 127.0.0.1:5000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1638:16)
+    at TCPConnectWrap.callbackTrampoline (node:internal/async_hooks:130:17) {
+  errno: -111,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 5000
+}
+Error: connect ECONNREFUSED 127.0.0.1:5000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1638:16)
+    at TCPConnectWrap.callbackTrampoline (node:internal/async_hooks:130:17) {
+  errno: -111,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 5000
+}
+ GET / 200 in 303ms
+Failed to proxy http://127.0.0.1:5000/api/products?limit=12 Error: connect ECONNREFUSED 127.0.0.1:5000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1638:16)
+    at TCPConnectWrap.callbackTrampoline (node:internal/async_hooks:130:17) {
+  errno: -111,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 5000
+}
+Error: connect ECONNREFUSED 127.0.0.1:5000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1638:16)
+    at TCPConnectWrap.callbackTrampoline (node:internal/async_hooks:130:17) {
+  errno: -111,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 5000
+}
+Failed to proxy http://127.0.0.1:5000/api/products?limit=12 Error: connect ECONNREFUSED 127.0.0.1:5000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1638:16)
+    at TCPConnectWrap.callbackTrampoline (node:internal/async_hooks:130:17) {
+  errno: -111,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 5000
+}
+Error: connect ECONNREFUSED 127.0.0.1:5000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1638:16)
+    at TCPConnectWrap.callbackTrampoline (node:internal/async_hooks:130:17) {
+  errno: -111,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 5000
+}
+ ✓ Compiled in 133.7s (950 modules)
+Failed to proxy http://127.0.0.1:5000/api/products?limit=12 Error: connect ECONNREFUSED 127.0.0.1:5000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1638:16)
+    at TCPConnectWrap.callbackTrampoline (node:internal/async_hooks:130:17) {
+  errno: -111,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 5000
+}
+Error: connect ECONNREFUSED 127.0.0.1:5000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1638:16)
+    at TCPConnectWrap.callbackTrampoline (node:internal/async_hooks:130:17) {
+  errno: -111,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 5000
+}
+Failed to proxy http://127.0.0.1:5000/api/products/admin?limit=100 Error: connect ECONNREFUSED 127.0.0.1:5000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1638:16)
+    at TCPConnectWrap.callbackTrampoline (node:internal/async_hooks:130:17) {
+  errno: -111,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 5000
+}
+Error: connect ECONNREFUSED 127.0.0.1:5000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1638:16)
+    at TCPConnectWrap.callbackTrampoline (node:internal/async_hooks:130:17) {
+  errno: -111,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 5000
+}
+Failed to proxy http://127.0.0.1:5000/api/products/categories Error: connect ECONNREFUSED 127.0.0.1:5000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1638:16)
+    at TCPConnectWrap.callbackTrampoline (node:internal/async_hooks:130:17) {
+  errno: -111,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 5000
+}
+Error: connect ECONNREFUSED 127.0.0.1:5000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1638:16)
+    at TCPConnectWrap.callbackTrampoline (node:internal/async_hooks:130:17) {
+  errno: -111,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 5000
+}
+Failed to proxy http://127.0.0.1:5000/api/products/admin?limit=100 Error: connect ECONNREFUSED 127.0.0.1:5000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1638:16)
+    at TCPConnectWrap.callbackTrampoline (node:internal/async_hooks:130:17) {
+  errno: -111,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 5000
+}
+Error: connect ECONNREFUSED 127.0.0.1:5000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1638:16)
+    at TCPConnectWrap.callbackTrampoline (node:internal/async_hooks:130:17) {
+  errno: -111,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 5000
+}
+Failed to proxy http://127.0.0.1:5000/api/products/categories Error: connect ECONNREFUSED 127.0.0.1:5000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1638:16)
+    at TCPConnectWrap.callbackTrampoline (node:internal/async_hooks:130:17) {
+  errno: -111,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 5000
+}
+Error: connect ECONNREFUSED 127.0.0.1:5000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1638:16)
+    at TCPConnectWrap.callbackTrampoline (node:internal/async_hooks:130:17) {
+  errno: -111,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 5000
+}
+ ○ Compiling /_error ...
+ ✓ Compiled /_error in 1506ms (952 modules)

@@ -143,10 +143,11 @@ const demoOrders = [
   { id: "order-1", orderNumber: "WIS-001", customer: "Jane Doe", email: "customer@wise.test", itemsCount: 2, totalPrice: 15500, status: "delivered", createdAt: "2026-03-15" }
 ];
 
-const fallbackResponse = <T,>(status: number, data: T) => ({
+const fallbackResponse = <T,>(status: number, data: T, meta?: Record<string, unknown>) => ({
   data: {
     success: true,
-    data
+    data,
+    ...(meta ? { meta } : {})
   },
   status,
   statusText: "OK"
@@ -170,11 +171,19 @@ apiClient.interceptors.request.use((config) => {
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
-    const url = (error?.config?.url || "").replace(/^\//, "");
-    const requestPath = url.split("?")[0];
+    const rawUrl = error?.config?.url || "";
+    let fullPath = rawUrl;
+    try {
+      const parsedUrl = new URL(rawUrl, "http://localhost");
+      fullPath = parsedUrl.pathname.replace(/^\//, "") + parsedUrl.search;
+    } catch {
+      fullPath = rawUrl.replace(/^\//, "");
+    }
+    const requestPath = fullPath.replace(/^api\//, "").split("?")[0];
     const method = (error?.config?.method || "get").toLowerCase();
     const status = error.response?.status;
     const serverError = !error.response || status >= 500;
+    const shouldFallback = serverError || status === 404;
 
     if (status === 401) {
       if (typeof window !== "undefined") {
@@ -185,7 +194,7 @@ apiClient.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    if (requestPath === "auth/login" && method === "post" && serverError) {
+    if (requestPath === "auth/login" && method === "post" && shouldFallback) {
       const { email, password } = error.config.data ? JSON.parse(error.config.data) : {};
       const user = demoUsers[email as keyof typeof demoUsers];
       if (user && demoPasswordByEmail[email as keyof typeof demoPasswordByEmail] === password) {
@@ -199,7 +208,7 @@ apiClient.interceptors.response.use(
       return Promise.reject(new Error("Invalid credentials"));
     }
 
-    if (requestPath === "auth/me" && method === "get" && serverError) {
+    if (requestPath === "auth/me" && method === "get" && shouldFallback) {
       const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
       if (token) {
         const email = token.replace("demo-", "");
@@ -211,44 +220,42 @@ apiClient.interceptors.response.use(
       return Promise.reject(new Error("Not authenticated"));
     }
 
-    if (requestPath === "products" && method === "get" && serverError) {
+    if (requestPath === "products" && method === "get" && shouldFallback) {
       return Promise.resolve(fallbackResponse(200, demoProducts));
     }
 
-    if (requestPath === "products/admin" && method === "get" && serverError) {
+    if (requestPath === "products/admin" && method === "get" && shouldFallback) {
       const params = error.config.params || {};
       const limit = Number(params.limit || 100);
+      const data = demoProducts.slice(0, limit);
       return Promise.resolve(
-        fallbackResponse(200, {
-          data: demoProducts.slice(0, limit),
-          meta: {
-            total: demoProducts.length,
-            page: 1,
-            limit,
-            totalPages: Math.ceil(demoProducts.length / limit)
-          }
+        fallbackResponse(200, data, {
+          total: demoProducts.length,
+          page: 1,
+          limit,
+          totalPages: Math.ceil(demoProducts.length / limit)
         })
       );
     }
 
-    if (requestPath === "products/categories" && method === "get" && serverError) {
+    if (requestPath === "products/categories" && method === "get" && shouldFallback) {
       return Promise.resolve(fallbackResponse(200, demoCategories));
     }
 
-    if (url === "users" && method === "get" && serverError) {
+    if (requestPath === "users" && method === "get" && shouldFallback) {
       return Promise.resolve(fallbackResponse(200, demoUsersList));
     }
 
-    if (url === "sellers" && method === "get" && serverError) {
+    if (requestPath === "sellers" && method === "get" && shouldFallback) {
       return Promise.resolve(fallbackResponse(200, demoSellers));
     }
 
-    if (url === "orders" && method === "get" && serverError) {
+    if (requestPath === "orders" && method === "get" && serverError) {
       return Promise.resolve(fallbackResponse(200, demoOrders));
     }
 
-    if (url.startsWith("products/") && method === "get" && serverError) {
-      const id = url.split("/")[1];
+    if (requestPath.startsWith("products/") && method === "get" && shouldFallback) {
+      const id = requestPath.split("/")[1];
       const product = demoProducts.find((p) => p.id === id);
       if (product) {
         return Promise.resolve(fallbackResponse(200, product));
@@ -256,7 +263,7 @@ apiClient.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    if (url === "products" && (method === "post" || method === "put") && serverError) {
+    if (requestPath === "products" && (method === "post" || method === "put") && serverError) {
       const payload = error.config.data ? JSON.parse(error.config.data) : {};
       const created = {
         id: `prod-${Date.now()}`,
@@ -269,8 +276,8 @@ apiClient.interceptors.response.use(
       return Promise.resolve(fallbackResponse(201, created));
     }
 
-    if (url.startsWith("products/") && method === "put" && serverError) {
-      const id = url.split("/")[1];
+    if (requestPath.startsWith("products/") && method === "put" && serverError) {
+      const id = requestPath.split("/")[1];
       const payload = error.config.data ? JSON.parse(error.config.data) : {};
       const index = demoProducts.findIndex((product) => product.id === id);
       if (index >= 0) {
@@ -285,8 +292,8 @@ apiClient.interceptors.response.use(
       }
     }
 
-    if (url.startsWith("products/") && method === "delete" && serverError) {
-      const id = url.split("/")[1];
+    if (requestPath.startsWith("products/") && method === "delete" && serverError) {
+      const id = requestPath.split("/")[1];
       const index = demoProducts.findIndex((product) => product.id === id);
       if (index >= 0) {
         demoProducts.splice(index, 1);
@@ -295,7 +302,7 @@ apiClient.interceptors.response.use(
       return Promise.resolve(fallbackResponse(200, { success: true }));
     }
 
-    if (url === "orders" && method === "post" && serverError) {
+    if (requestPath === "orders" && method === "post" && serverError) {
       const payload = error.config.data ? JSON.parse(error.config.data) : {};
       const order = {
         id: `order-${Date.now()}`,
@@ -308,8 +315,8 @@ apiClient.interceptors.response.use(
       return Promise.resolve(fallbackResponse(201, order));
     }
 
-    if (url.startsWith("orders/") && method === "put" && serverError) {
-      const id = url.split("/")[1];
+    if (requestPath.startsWith("orders/") && method === "put" && serverError) {
+      const id = requestPath.split("/")[1];
       const payload = error.config.data ? JSON.parse(error.config.data) : {};
       const index = demoOrders.findIndex((order) => order.id === id);
       if (index >= 0) {
@@ -318,7 +325,7 @@ apiClient.interceptors.response.use(
       }
     }
 
-    if (url.startsWith("orders/") && method === "post" && serverError) {
+    if (requestPath.startsWith("orders/") && method === "post" && serverError) {
       return Promise.resolve(fallbackResponse(200, { success: true }));
     }
 
