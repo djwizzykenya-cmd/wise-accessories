@@ -1,12 +1,96 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { LatLngTuple, LeafletMouseEvent, Map as LeafletMap, Marker } from "leaflet";
 
 interface Coords {
   lat: number;
   lng: number;
 }
+
+interface DeliveryAddress {
+  street: string;
+  city: string;
+  state: string;
+  postalCode: string;
+  country: string;
+  label: string;
+}
+
+export interface DeliveryLocation extends Coords {
+  address: DeliveryAddress;
+}
+
+const isValidCoords = (value: unknown): value is Coords => {
+  if (!value || typeof value !== "object") return false;
+  const coords = value as Partial<Coords>;
+  return (
+    typeof coords.lat === "number" &&
+    Number.isFinite(coords.lat) &&
+    coords.lat >= -90 &&
+    coords.lat <= 90 &&
+    typeof coords.lng === "number" &&
+    Number.isFinite(coords.lng) &&
+    coords.lng >= -180 &&
+    coords.lng <= 180
+  );
+};
+
+const getFallbackAddress = (coords: Coords): DeliveryAddress => ({
+  street: "Map pin delivery location",
+  city: "Pinned location",
+  state: "Kenya",
+  postalCode: "00000",
+  country: "KE",
+  label: `${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)}`
+});
+
+const parseDeliveryAddress = (value: unknown): DeliveryAddress | null => {
+  if (!value || typeof value !== "object") return null;
+  const address = value as Partial<DeliveryAddress>;
+  if (
+    typeof address.street !== "string" ||
+    typeof address.city !== "string" ||
+    typeof address.state !== "string" ||
+    typeof address.postalCode !== "string" ||
+    typeof address.country !== "string" ||
+    typeof address.label !== "string"
+  ) {
+    return null;
+  }
+  return {
+    street: address.street,
+    city: address.city,
+    state: address.state,
+    postalCode: address.postalCode,
+    country: address.country,
+    label: address.label
+  };
+};
+
+const getAddressParts = (address: Record<string, unknown>, coords: Coords): DeliveryAddress => {
+  const street = [address.house_number, address.road].filter((part): part is string => typeof part === "string").join(" ");
+  const city = [address.city, address.town, address.village, address.suburb, address.county]
+    .find((part): part is string => typeof part === "string" && part.trim().length > 0);
+  const state = [address.state, address.county].find(
+    (part): part is string => typeof part === "string" && part.trim().length > 0
+  );
+  const countryCode = address.country_code;
+
+  return {
+    street: street || "Map pin delivery location",
+    city: city || "Pinned location",
+    state: state || "Kenya",
+    postalCode: typeof address.postcode === "string" && address.postcode ? address.postcode : "00000",
+    country: typeof countryCode === "string" ? countryCode.toUpperCase() : "KE",
+    label: [
+      street,
+      city,
+      state && state !== city ? state : undefined,
+      typeof address.country === "string" ? address.country : undefined
+    ].filter(Boolean).join(", ") || `${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)}`
+  };
+};
 
 const CSS_URL = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
 const JS_URL = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
@@ -31,18 +115,45 @@ function ensureCss(href: string) {
   document.head.appendChild(l);
 }
 
-export default function DeliveryMap({ initial }: { initial?: Coords }) {
+export default function DeliveryMap({
+  initial,
+  onLocationChange,
+  onLocationLookupChange
+}: {
+  initial?: Coords | null;
+  onLocationChange?: (location: DeliveryLocation) => void;
+  onLocationLookupChange?: (loading: boolean) => void;
+}) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<LeafletMap | null>(null);
   const markerRef = useRef<Marker | null>(null);
   const coordsRef = useRef<Coords | null>(initial ?? null);
+  const addressRef = useRef<DeliveryAddress | null>(null);
+  const lookupControllerRef = useRef<AbortController | null>(null);
   const [coords, setCoords] = useState<Coords | null>(() => {
     try {
+      const savedLocation = localStorage.getItem("deliveryLocation");
+      if (savedLocation) {
+        const parsed: unknown = JSON.parse(savedLocation);
+        if (parsed && typeof parsed === "object") {
+          const saved = parsed as Partial<DeliveryLocation>;
+          const savedAddress = parseDeliveryAddress(saved.address);
+          if (isValidCoords(saved) && savedAddress) {
+            const savedCoords = { lat: saved.lat, lng: saved.lng };
+            addressRef.current = savedAddress;
+            coordsRef.current = savedCoords;
+            return savedCoords;
+          }
+        }
+      }
+
       const raw = localStorage.getItem("deliveryCoords");
       if (raw) {
-        const parsed = JSON.parse(raw) as Coords;
-        coordsRef.current = parsed;
-        return parsed;
+        const parsed: unknown = JSON.parse(raw);
+        if (isValidCoords(parsed)) {
+          coordsRef.current = parsed;
+          return parsed;
+        }
       }
     } catch {
       // ignore invalid saved coords
@@ -50,6 +161,71 @@ export default function DeliveryMap({ initial }: { initial?: Coords }) {
     return initial || null;
   });
   const [loading, setLoading] = useState(false);
+  const [locationError, setLocationError] = useState("");
+  const [locationLabel, setLocationLabel] = useState("");
+  const [lookingUpAddress, setLookingUpAddress] = useState(false);
+
+  const saveCoords = useCallback(async (next: Coords) => {
+    setCoords(next);
+    coordsRef.current = next;
+    setLocationError("");
+    setLookingUpAddress(true);
+    onLocationLookupChange?.(true);
+    const fallbackAddress = getFallbackAddress(next);
+    addressRef.current = fallbackAddress;
+    setLocationLabel(fallbackAddress.label);
+    onLocationChange?.({ ...next, address: fallbackAddress });
+    lookupControllerRef.current?.abort();
+    const controller = new AbortController();
+    lookupControllerRef.current = controller;
+
+    try {
+      localStorage.setItem("deliveryCoords", JSON.stringify(next));
+      localStorage.setItem("deliveryLocation", JSON.stringify({ ...next, address: fallbackAddress }));
+    } catch (error) {
+      console.warn("Unable to save delivery location in this browser", error);
+    }
+
+    try {
+      const query = new URLSearchParams({
+        format: "jsonv2",
+        lat: String(next.lat),
+        lon: String(next.lng),
+        zoom: "18",
+        addressdetails: "1"
+      });
+      const response = await fetch(`https://nominatim.openstreetmap.org/reverse?${query}`, {
+        signal: controller.signal,
+        headers: { "Accept-Language": "en" }
+      });
+      if (!response.ok) throw new Error(`Address lookup failed with status ${response.status}`);
+
+      const result: unknown = await response.json();
+      if (!result || typeof result !== "object") throw new Error("Address lookup returned an invalid response");
+      const data = result as { address?: Record<string, unknown> };
+      if (!data.address) throw new Error("Address lookup returned no address details");
+
+      const address = getAddressParts(data.address, next);
+      addressRef.current = address;
+      setLocationLabel(address.label);
+      onLocationChange?.({ ...next, address });
+      try {
+        localStorage.setItem("deliveryLocation", JSON.stringify({ ...next, address }));
+      } catch (error) {
+        console.warn("Unable to save delivery address in this browser", error);
+      }
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      console.warn("Unable to reverse-geocode selected delivery coordinates", error);
+      setLocationError("Nearby address details are unavailable; the selected map pin will be used for delivery.");
+    } finally {
+      if (lookupControllerRef.current === controller) {
+        lookupControllerRef.current = null;
+        setLookingUpAddress(false);
+        onLocationLookupChange?.(false);
+      }
+    }
+  }, [onLocationChange, onLocationLookupChange]);
 
   useEffect(() => {
     ensureCss(CSS_URL);
@@ -83,29 +259,25 @@ export default function DeliveryMap({ initial }: { initial?: Coords }) {
 
           markerRef.current = L.marker([defaultCoords.lat, defaultCoords.lng] as LatLngTuple, { draggable: true }).addTo(mapRef.current);
 
+          if (coordsRef.current) {
+            const savedAddress = addressRef.current;
+            if (savedAddress) {
+              setLocationLabel(savedAddress.label);
+              onLocationChange?.({ ...coordsRef.current, address: savedAddress });
+            } else {
+              void saveCoords(coordsRef.current);
+            }
+          }
+
           markerRef.current.on("dragend", () => {
             const point = markerRef.current?.getLatLng();
             if (!point) return;
-            const next = { lat: point.lat, lng: point.lng };
-            setCoords(next);
-            coordsRef.current = next;
-            try {
-              localStorage.setItem("deliveryCoords", JSON.stringify(next));
-            } catch {
-              // ignore localStorage errors
-            }
+            void saveCoords({ lat: point.lat, lng: point.lng });
           });
 
           mapRef.current.on("click", (event: LeafletMouseEvent) => {
             markerRef.current?.setLatLng(event.latlng);
-            const next = { lat: event.latlng.lat, lng: event.latlng.lng };
-            setCoords(next);
-            coordsRef.current = next;
-            try {
-              localStorage.setItem("deliveryCoords", JSON.stringify(next));
-            } catch {
-              // ignore localStorage errors
-            }
+            void saveCoords({ lat: event.latlng.lat, lng: event.latlng.lng });
           });
         })().catch((error) => console.error(error));
       })
@@ -117,8 +289,9 @@ export default function DeliveryMap({ initial }: { initial?: Coords }) {
         mapRef.current.remove();
         mapRef.current = null;
       }
+      lookupControllerRef.current?.abort();
     };
-  }, []);
+  }, [saveCoords, onLocationChange]);
 
   useEffect(() => {
     if (coords && mapRef.current) {
@@ -132,58 +305,66 @@ export default function DeliveryMap({ initial }: { initial?: Coords }) {
   }, [coords]);
 
   const useMyLocation = () => {
-    if (!navigator.geolocation) return alert("Geolocation not supported in this browser.");
+    if (!navigator.geolocation) {
+      setLocationError("Location access is not supported by this browser. You can still choose a point on the map.");
+      return;
+    }
     setLoading(true);
+    setLocationError("");
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         const next = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-        setCoords(next);
-        coordsRef.current = next;
-        try {
-          localStorage.setItem("deliveryCoords", JSON.stringify(next));
-        } catch {
-          // ignore localStorage errors
-        }
+        void saveCoords(next);
         if (mapRef.current) {
           mapRef.current.setView([next.lat, next.lng] as LatLngTuple, 13);
           markerRef.current?.setLatLng([next.lat, next.lng] as LatLngTuple);
         }
         setLoading(false);
-      },
-      () => {
+      }, (error) => {
         setLoading(false);
-        alert("Unable to get your location. Please allow location access or enter an address.");
+        setLocationError(
+          error.code === error.PERMISSION_DENIED
+            ? "Location permission was denied. Choose a point on the map instead."
+            : "Unable to get your location. Choose a point on the map instead."
+        );
       }
     );
   };
 
   return (
-    <div className="rounded-3xl bg-white p-4 shadow-sm">
-      <div className="flex items-center justify-between mb-3">
+    <div className="rounded-2xl bg-slate-50 p-4">
+      <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="text-sm uppercase tracking-[0.18em] text-slate-500">Delivery map</p>
-          <h3 className="text-lg font-semibold text-slate-900">Choose delivery location</h3>
+          <h3 className="text-base font-semibold text-slate-900">Choose delivery location</h3>
+          <p className="mt-1 text-sm text-slate-600">Tap the map or drag the pin to choose your drop-off point.</p>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={useMyLocation}
-            className="rounded-full bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-red-700"
-          >
-            {loading ? "Locating..." : "Use my location"}
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={useMyLocation}
+          disabled={loading}
+          className="shrink-0 rounded-full bg-red-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-70"
+        >
+          {loading ? "Locating…" : "Use my location"}
+        </button>
       </div>
 
-      <div className="w-full h-64 overflow-hidden rounded-xl" ref={containerRef} />
+      <div className="h-56 w-full overflow-hidden rounded-xl border border-slate-200 sm:h-64" ref={containerRef} />
 
-      <div className="mt-3 text-sm text-slate-600">
-        {coords ? (
-          <div>
-            Selected: {coords.lat.toFixed(6)}, {coords.lng.toFixed(6)}
-          </div>
+      <div className="mt-3 text-sm" aria-live="polite">
+        {locationError ? (
+          <p className="text-amber-800" role="status">{locationError}</p>
+        ) : coords ? (
+          <p className="text-slate-600">
+            <span className="font-medium text-emerald-700">
+              {lookingUpAddress ? "Finding nearby address…" : "Delivery location selected."}
+            </span>
+            {locationLabel && <span className="block pt-1">{locationLabel}</span>}
+            <span className="block pt-1 text-xs text-slate-500">
+              {coords.lat.toFixed(5)}, {coords.lng.toFixed(5)}
+            </span>
+          </p>
         ) : (
-          <div>Tap the map to choose a location or use your device location.</div>
+          <p className="text-slate-600">Select a point on the map to set your delivery location.</p>
         )}
       </div>
     </div>

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useCart } from "@/context/CartContext";
-import DeliveryMap from "@/components/DeliveryMap";
+import DeliveryMap, { type DeliveryLocation } from "@/components/DeliveryMap";
 import { useSearchParams, useRouter } from "next/navigation";
 import apiClient from "@/lib/api";
 import { products as localProducts } from "@/data/products";
@@ -14,6 +14,29 @@ interface QuickBuyProduct {
   price: number;
   images?: string[];
 }
+
+const isDeliveryLocation = (value: unknown): value is DeliveryLocation => {
+  if (!value || typeof value !== "object") return false;
+  const location = value as Partial<DeliveryLocation>;
+  const address = location.address;
+  return (
+    typeof location.lat === "number" &&
+    Number.isFinite(location.lat) &&
+    location.lat >= -90 &&
+    location.lat <= 90 &&
+    typeof location.lng === "number" &&
+    Number.isFinite(location.lng) &&
+    location.lng >= -180 &&
+    location.lng <= 180 &&
+    !!address &&
+    typeof address.street === "string" &&
+    typeof address.city === "string" &&
+    typeof address.state === "string" &&
+    typeof address.postalCode === "string" &&
+    typeof address.country === "string" &&
+    typeof address.label === "string"
+  );
+};
 
 const PAYMENT_METHODS = [
   { value: "cash_on_delivery", label: "Cash on delivery" },
@@ -26,32 +49,27 @@ export default function CheckoutPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
 
-  const [shippingAddress, setShippingAddress] = useState({
-    street: "",
-    city: "",
-    state: "",
-    postalCode: "",
-    country: "KE"
-  });
+  const [deliveryLocation, setDeliveryLocation] = useState<DeliveryLocation | null>(null);
+  const [deliveryLookupLoading, setDeliveryLookupLoading] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState("cash_on_delivery");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const orderPayload = useMemo(
-    () => ({
-      items: items.map((item) => ({ productId: item.productId, quantity: item.quantity, price: item.price })),
-      shippingAddress: {
-        ...shippingAddress,
-        latitude: typeof window !== "undefined" ? Number(localStorage.getItem("deliveryCoords") ? JSON.parse(localStorage.getItem("deliveryCoords") as string).lat : 0) : 0,
-        longitude: typeof window !== "undefined" ? Number(localStorage.getItem("deliveryCoords") ? JSON.parse(localStorage.getItem("deliveryCoords") as string).lng : 0) : 0
-      },
-      paymentMethod
-    }),
-    [items, shippingAddress, paymentMethod]
-  );
-
   const productId = searchParams?.get("product") ?? null;
   const processedQuickBuyIds = useMemo(() => new Set<string>(), []);
+
+  useEffect(() => {
+    try {
+      const savedLocation = localStorage.getItem("deliveryLocation");
+      if (!savedLocation) return;
+
+      const parsed: unknown = JSON.parse(savedLocation);
+      if (isDeliveryLocation(parsed)) setDeliveryLocation(parsed);
+      else console.warn("Ignoring invalid saved delivery location");
+    } catch (storageError) {
+      console.warn("Unable to read saved delivery location", storageError);
+    }
+  }, []);
 
   useEffect(() => {
     if (!productId || processedQuickBuyIds.has(productId)) {
@@ -122,19 +140,33 @@ export default function CheckoutPage() {
     });
   }, [productId, addItem, processedQuickBuyIds]);
 
-  const handleAddressChange = (field: string, value: string) => {
-    setShippingAddress((prev) => ({ ...prev, [field]: value }));
-  };
-
   const handleSubmit = async () => {
     setError("");
-    setLoading(true);
 
-    if (!shippingAddress.street || !shippingAddress.city || !shippingAddress.state || !shippingAddress.postalCode) {
-      setError("Please fill in your shipping address.");
-      setLoading(false);
+    if (!deliveryLocation) {
+      setError("Choose your delivery location on the map before continuing.");
       return;
     }
+
+    if (deliveryLookupLoading) {
+      setError("Please wait while we find the delivery address for your map pin.");
+      return;
+    }
+
+    setLoading(true);
+    const orderPayload = {
+      items: items.map((item) => ({ productId: item.productId, quantity: item.quantity, price: item.price })),
+      shippingAddress: {
+        street: deliveryLocation.address.street,
+        city: deliveryLocation.address.city,
+        state: deliveryLocation.address.state,
+        postalCode: deliveryLocation.address.postalCode,
+        country: deliveryLocation.address.country,
+        latitude: deliveryLocation.lat,
+        longitude: deliveryLocation.lng
+      },
+      paymentMethod
+    };
 
     try {
       const response = await apiClient.post("/orders", {
@@ -180,134 +212,90 @@ export default function CheckoutPage() {
 
   return (
     <main className="min-h-screen bg-slate-50 py-10">
-      <div className="mx-auto max-w-5xl rounded-3xl bg-white p-6 shadow-lg sm:p-8 lg:p-10">
-        <div className="mb-6 flex flex-col gap-3 justify-between sm:flex-row sm:items-center">
-          <h1 className="text-3xl font-bold text-slate-900">Checkout</h1>
+      <div className="mx-auto max-w-6xl rounded-3xl bg-white p-5 shadow-lg sm:p-8 lg:p-10">
+        <div className="mb-7 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-red-600">Delivery and payment</p>
+            <h1 className="mt-1 text-3xl font-bold text-slate-900">Checkout</h1>
+          </div>
           <Link href="/products" className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-red-500 hover:text-red-600">
             ← Back to products
           </Link>
         </div>
-        <div className="grid gap-8 lg:grid-cols-[1.5fr_1fr]">
+        <div className="grid items-start gap-6 md:grid-cols-[minmax(0,1.2fr)_minmax(18rem,0.8fr)] lg:gap-8">
           <div className="space-y-6">
-            <div className="rounded-3xl border border-slate-200 p-6">
-              <h2 className="text-xl font-semibold text-slate-900 mb-4">Shipping address</h2>
-              <div className="space-y-4">
-                <label className="block">
-                  <span className="text-sm font-medium text-slate-700">Street address</span>
-                  <input
-                    type="text"
-                    value={shippingAddress.street}
-                    onChange={(e) => handleAddressChange("street", e.target.value)}
-                    className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-                    placeholder="123 Nairobi Road"
-                  />
-                </label>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <label className="block">
-                    <span className="text-sm font-medium text-slate-700">City</span>
-                    <input
-                      type="text"
-                      value={shippingAddress.city}
-                      onChange={(e) => handleAddressChange("city", e.target.value)}
-                      className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-                      placeholder="Nairobi"
-                    />
-                  </label>
-                  <label className="block">
-                    <span className="text-sm font-medium text-slate-700">State / County</span>
-                    <input
-                      type="text"
-                      value={shippingAddress.state}
-                      onChange={(e) => handleAddressChange("state", e.target.value)}
-                      className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-                      placeholder="Nairobi County"
-                    />
-                  </label>
-                </div>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <label className="block">
-                    <span className="text-sm font-medium text-slate-700">Postal code</span>
-                    <input
-                      type="text"
-                      value={shippingAddress.postalCode}
-                      onChange={(e) => handleAddressChange("postalCode", e.target.value)}
-                      className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-                      placeholder="00100"
-                    />
-                  </label>
-                  <label className="block">
-                    <span className="text-sm font-medium text-slate-700">Country</span>
-                    <input
-                      type="text"
-                      value={shippingAddress.country}
-                      onChange={(e) => handleAddressChange("country", e.target.value)}
-                      className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-                      placeholder="KE"
-                    />
-                  </label>
-                </div>
-              </div>
-            </div>
+            <section className="rounded-3xl border border-slate-200 p-4 sm:p-5" aria-label="Delivery location">
+              <DeliveryMap
+                initial={deliveryLocation}
+                onLocationChange={setDeliveryLocation}
+                onLocationLookupChange={setDeliveryLookupLoading}
+              />
+            </section>
 
-            <div className="rounded-3xl border border-slate-200 p-6">
-              <h2 className="text-xl font-semibold text-slate-900 mb-4">Payment method</h2>
+            <section className="rounded-3xl border border-slate-200 p-5 sm:p-6" aria-labelledby="payment-method-heading">
+              <h2 id="payment-method-heading" className="mb-4 text-xl font-semibold text-slate-900">Payment method</h2>
               <div className="space-y-3">
                 {PAYMENT_METHODS.map((method) => (
-                  <label key={method.value} className="flex items-center gap-3 rounded-3xl border border-slate-200 bg-slate-50 p-4 cursor-pointer">
+                  <label
+                    key={method.value}
+                    className={`flex cursor-pointer items-center gap-3 rounded-2xl border p-4 transition ${
+                      paymentMethod === method.value
+                        ? "border-red-500 bg-red-50"
+                        : "border-slate-200 bg-white hover:border-slate-300"
+                    }`}
+                  >
                     <input
                       type="radio"
                       name="paymentMethod"
                       value={method.value}
                       checked={paymentMethod === method.value}
                       onChange={() => setPaymentMethod(method.value)}
-                      className="h-4 w-4 text-indigo-600"
+                      className="h-4 w-4 accent-red-600"
                     />
                     <span className="font-medium text-slate-900">{method.label}</span>
                   </label>
                 ))}
               </div>
-            </div>
+            </section>
 
-            {error ? <div className="rounded-3xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div> : null}
+            {error ? <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700" role="alert">{error}</div> : null}
           </div>
 
           <div className="space-y-6">
-            <div className="rounded-3xl border border-slate-200 bg-slate-50 p-6">
-              <h2 className="text-xl font-semibold text-slate-900 mb-4">Order summary</h2>
+            <section className="rounded-3xl border border-slate-200 bg-slate-50 p-5 sm:p-6" aria-labelledby="order-summary-heading">
+              <h2 id="order-summary-heading" className="mb-4 text-xl font-semibold text-slate-900">Order summary</h2>
               <div className="space-y-4">
                 {items.map((item) => (
-                  <div key={item.productId} className="flex items-center justify-between gap-4 rounded-3xl bg-white p-4">
-                    <div>
+                  <div key={item.productId} className="flex items-center justify-between gap-4 rounded-2xl bg-white p-4">
+                    <div className="min-w-0">
                       <p className="font-semibold text-slate-900">{item.name}</p>
                       <p className="text-sm text-slate-500">Qty: {item.quantity}</p>
                     </div>
-                    <p className="font-bold text-indigo-600">KES {(item.price * item.quantity).toFixed(0)}</p>
+                    <p className="shrink-0 font-bold text-red-600">KES {(item.price * item.quantity).toLocaleString("en-KE")}</p>
                   </div>
                 ))}
               </div>
               <div className="mt-6 border-t border-slate-200 pt-4">
                 <div className="flex items-center justify-between text-slate-700">
                   <span className="font-medium">Total</span>
-                  <span className="text-xl font-bold text-slate-900">KES {total.toFixed(0)}</span>
+                  <span className="text-xl font-bold text-slate-900">KES {total.toLocaleString("en-KE")}</span>
                 </div>
               </div>
-            </div>
-
-            <div className="rounded-3xl border border-slate-200 p-6">
-              <div className="mb-4">
-                <p className="text-sm uppercase tracking-[0.18em] text-slate-500">Delivery map</p>
-                <h3 className="text-lg font-semibold text-slate-900">Choose delivery location</h3>
-              </div>
-              <DeliveryMap />
-            </div>
+            </section>
 
             <button
               type="button"
               onClick={handleSubmit}
-              disabled={loading}
-              className="w-full rounded-3xl bg-red-600 px-5 py-4 text-sm font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+              disabled={loading || deliveryLookupLoading || !deliveryLocation}
+              className="w-full rounded-2xl bg-red-600 px-5 py-4 text-sm font-semibold text-white transition hover:bg-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:bg-slate-400"
             >
-              {loading ? "Placing order…" : "Place order and continue to payment"}
+              {loading
+                ? "Placing order…"
+                : deliveryLookupLoading
+                  ? "Finding delivery address…"
+                  : deliveryLocation
+                    ? "Place order and continue to payment"
+                    : "Select delivery location to continue"}
             </button>
           </div>
         </div>
