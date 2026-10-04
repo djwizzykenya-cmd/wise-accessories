@@ -2,7 +2,9 @@
 const nextConfig = {
   reactStrictMode: true,
   output: "standalone",
-  swcMinify: true,
+  turbopack: {
+    root: __dirname
+  },
   async rewrites() {
     // If NEXT_PUBLIC_API_URL is set, assume API URL is managed via env and
     // do not apply a development-only proxy rewrite (Vercel will route
