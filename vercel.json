@@ -1,6 +1,5 @@
 {
   "framework": "nextjs",
-  "rootDirectory": "web",
   "installCommand": "npm install --workspaces=false --prefix web",
   "buildCommand": "npm run build --prefix web",
   "outputDirectory": "web/.next"
