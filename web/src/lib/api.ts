@@ -26,17 +26,6 @@ const demoUsers: Record<string, DemoUser> = {
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
   },
-  "seller@wise.test": {
-    id: "demo-seller",
-    email: "seller@wise.test",
-    firstName: "Wise",
-    lastName: "Seller",
-    phone: "+254700000000",
-    userType: "seller",
-    isActive: true,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  },
   "customer@wise.test": {
     id: "demo-customer",
     email: "customer@wise.test",
@@ -52,7 +41,6 @@ const demoUsers: Record<string, DemoUser> = {
 
 const demoPasswordByEmail: Record<string, string> = {
   "admin@wise.test": "adminpass",
-  "seller@wise.test": "sellerpass",
   "customer@wise.test": "customerpass"
 };
 
@@ -131,12 +119,7 @@ const demoCategories = [
 
 const demoUsersList = [
   { id: "user-1", name: "Jane Doe", email: "customer@wise.test", userType: "customer", createdAt: "2026-01-15" },
-  { id: "user-2", name: "Wise Admin", email: "admin@wise.test", userType: "admin", createdAt: "2025-12-01" },
-  { id: "user-3", name: "Wise Seller", email: "seller@wise.test", userType: "seller", createdAt: "2025-11-20" }
-];
-
-const demoSellers = [
-  { id: "seller-1", shopName: "Wise Accessories Store", ownerName: "Wise Seller", email: "seller@wise.test", status: "approved", productsCount: 12, rating: 4.8, createdAt: "2025-11-20" }
+  { id: "user-2", name: "Wise Admin", email: "admin@wise.test", userType: "admin", createdAt: "2025-12-01" }
 ];
 
 const demoOrders = [
@@ -161,7 +144,7 @@ export const apiClient = axios.create({
 // Add token to requests
 apiClient.interceptors.request.use((config) => {
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
-  if (token) {
+  if (token && !config.headers.Authorization) {
     config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
@@ -185,12 +168,30 @@ apiClient.interceptors.response.use(
     const serverError = !error.response || status >= 500;
     const shouldFallback = serverError || status === 404;
 
+    const productReviewPath = requestPath.match(/^products\/([^/]+)\/reviews$/);
+    if (process.env.NODE_ENV !== "production" && productReviewPath && method === "get" && shouldFallback) {
+      return Promise.resolve(fallbackResponse(200, { reviews: [], rating: null, reviewCount: 0 }));
+    }
+
+    if (
+      process.env.NODE_ENV !== "production" &&
+      requestPath.match(/^products\/([^/]+)\/reviews\/me$/) &&
+      method === "get" &&
+      shouldFallback
+    ) {
+      return Promise.resolve(fallbackResponse(200, { eligible: false, review: null }));
+    }
+
     if (status === 401) {
       if (typeof window !== "undefined") {
         localStorage.removeItem("token");
         localStorage.removeItem("user");
         window.location.href = "/auth";
       }
+      return Promise.reject(error);
+    }
+
+    if (process.env.NODE_ENV === "production") {
       return Promise.reject(error);
     }
 
@@ -246,15 +247,11 @@ apiClient.interceptors.response.use(
       return Promise.resolve(fallbackResponse(200, demoUsersList));
     }
 
-    if (requestPath === "sellers" && method === "get" && shouldFallback) {
-      return Promise.resolve(fallbackResponse(200, demoSellers));
-    }
-
     if (requestPath === "orders" && method === "get" && serverError) {
       return Promise.resolve(fallbackResponse(200, demoOrders));
     }
 
-    if (requestPath.startsWith("products/") && method === "get" && shouldFallback) {
+    if (requestPath.startsWith("products/") && !requestPath.includes("/reviews") && method === "get" && shouldFallback) {
       const id = requestPath.split("/")[1];
       const product = demoProducts.find((p) => p.id === id);
       if (product) {

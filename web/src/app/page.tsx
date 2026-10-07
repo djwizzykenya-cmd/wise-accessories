@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import ProductCard from "@/components/ProductCard";
 import { useAuth } from "@/context/AuthContext";
+import { useCart } from "@/context/CartContext";
 import apiClient from "@/lib/api";
 
 interface Product {
@@ -34,6 +35,8 @@ const BENEFITS = [
 
 export default function HomePage() {
   const { user } = useAuth();
+  const { items } = useCart();
+  const cartCount = items.reduce((count, item) => count + item.quantity, 0);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [productsError, setProductsError] = useState("");
@@ -95,17 +98,37 @@ export default function HomePage() {
 
           <div className="flex shrink-0 items-center gap-2 sm:gap-3">
             {user?.userType === "admin" ? (
-              <Link href="/admin" className="hidden rounded-full px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 sm:inline-flex">
+              <Link href="/admin" className="inline-flex rounded-full px-2.5 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 sm:px-4 sm:text-sm">
                 Admin
+              </Link>
+            ) : user ? (
+              <Link href="/account" className="rounded-full px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 sm:px-4">
+                My account
               </Link>
             ) : (
               <Link href="/auth" className="rounded-full px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 sm:px-4">
                 Sign in
               </Link>
             )}
-            <Link href="/checkout" aria-label="Shopping cart" className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-3 py-2.5 text-sm font-semibold text-white transition hover:bg-red-700 sm:px-4">
-              <span aria-hidden="true">🛒</span>
+            <Link
+              href="/cart"
+              aria-label={`Shopping cart${cartCount ? `, ${cartCount} ${cartCount === 1 ? "item" : "items"}` : ", empty"}`}
+              className="relative inline-flex items-center gap-2 rounded-full bg-slate-900 px-3 py-2.5 text-sm font-semibold text-white transition hover:bg-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600 focus-visible:ring-offset-2 sm:px-4"
+            >
+              <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" className="h-5 w-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 3h2l2.2 11.1a2 2 0 0 0 2 1.6h7.9a2 2 0 0 0 2-1.6L21 8H6" />
+                <circle cx="10" cy="20" r="1" />
+                <circle cx="18" cy="20" r="1" />
+              </svg>
               <span className="hidden sm:inline">Cart</span>
+              {cartCount > 0 && (
+                <span
+                  aria-hidden="true"
+                  className="absolute -right-1.5 -top-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-[11px] font-bold leading-none text-white ring-2 ring-white"
+                >
+                  {cartCount > 99 ? "99+" : cartCount}
+                </span>
+              )}
             </Link>
           </div>
         </div>
@@ -229,7 +252,7 @@ export default function HomePage() {
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.18em] text-red-600">Selected for you</p>
               <h2 id="popular-heading" className="mt-2 text-2xl font-extrabold tracking-tight text-slate-950 sm:text-3xl">Popular motorcycle parts</h2>
-              <p className="mt-2 text-sm text-slate-500">Explore products available from marketplace sellers.</p>
+              <p className="mt-2 text-sm text-slate-500">Explore motorcycle parts and accessories from Wise Accessories.</p>
             </div>
             <Link href="/products" className="inline-flex items-center gap-2 text-sm font-bold text-red-600 transition hover:text-red-700">
               Browse all <span aria-hidden="true">→</span>

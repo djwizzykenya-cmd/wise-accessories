@@ -85,7 +85,7 @@ describe("CheckoutPage", () => {
     render(<CheckoutPage />);
 
     expect(screen.getByRole("radio", { name: /m-pesa/i })).toBeDisabled();
-    expect(screen.queryByRole("radio", { name: /card payment/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /card payment/i })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: /set test delivery location/i }));
     fireEvent.click(screen.getByRole("button", { name: /place cash-on-delivery order/i }));
 

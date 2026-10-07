@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { LatLngTuple, LeafletMouseEvent, Map as LeafletMap, Marker } from "leaflet";
+import "leaflet/dist/leaflet.css";
 
 interface Coords {
   lat: number;
@@ -92,29 +93,6 @@ const getAddressParts = (address: Record<string, unknown>, coords: Coords): Deli
   };
 };
 
-const CSS_URL = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
-const JS_URL = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
-
-function loadScript(src: string) {
-  return new Promise<void>((resolve, reject) => {
-    if (document.querySelector(`script[src="${src}"]`)) return resolve();
-    const s = document.createElement("script");
-    s.src = src;
-    s.async = true;
-    s.onload = () => resolve();
-    s.onerror = () => reject(new Error("Failed to load script: " + src));
-    document.head.appendChild(s);
-  });
-}
-
-function ensureCss(href: string) {
-  if (document.querySelector(`link[href="${href}"]`)) return;
-  const l = document.createElement("link");
-  l.rel = "stylesheet";
-  l.href = href;
-  document.head.appendChild(l);
-}
-
 export default function DeliveryMap({
   initial,
   onLocationChange,
@@ -164,6 +142,7 @@ export default function DeliveryMap({
   const [locationError, setLocationError] = useState("");
   const [locationLabel, setLocationLabel] = useState("");
   const [lookingUpAddress, setLookingUpAddress] = useState(false);
+  const [mapError, setMapError] = useState("");
 
   const saveCoords = useCallback(async (next: Coords) => {
     setCoords(next);
@@ -228,60 +207,59 @@ export default function DeliveryMap({
   }, [onLocationChange, onLocationLookupChange]);
 
   useEffect(() => {
-    ensureCss(CSS_URL);
     let mounted = true;
 
-    loadScript(JS_URL)
-      .then(() => {
-        if (!mounted) return;
-        (async () => {
-          const windowWithLeaflet = window as Window & { L?: typeof import("leaflet") };
-          let L = windowWithLeaflet.L;
+    void import("leaflet")
+      .then((L) => {
+        if (!mounted || !containerRef.current) return;
 
-          if (!L) {
-            try {
-              const mod = await import("leaflet");
-              L = mod;
-            } catch (error) {
-              console.error("Leaflet not available:", error);
-              return;
-            }
+        const defaultCoords: Coords = coordsRef.current ?? { lat: -1.286389, lng: 36.817223 };
+        mapRef.current = L.map(containerRef.current).setView([defaultCoords.lat, defaultCoords.lng] as LatLngTuple, 13);
+
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+          attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(mapRef.current);
+
+        const deliveryMarkerIcon = L.icon({
+          iconUrl: "/leaflet-marker-icon.png",
+          iconRetinaUrl: "/leaflet-marker-icon-2x.png",
+          shadowUrl: "/leaflet-marker-shadow.png",
+          iconSize: [25, 41],
+          iconAnchor: [12, 41],
+          popupAnchor: [1, -34],
+          shadowSize: [41, 41]
+        });
+        markerRef.current = L.marker([defaultCoords.lat, defaultCoords.lng] as LatLngTuple, {
+          draggable: true,
+          icon: deliveryMarkerIcon
+        }).addTo(mapRef.current);
+
+        if (coordsRef.current) {
+          const savedAddress = addressRef.current;
+          if (savedAddress) {
+            setLocationLabel(savedAddress.label);
+            onLocationChange?.({ ...coordsRef.current, address: savedAddress });
+          } else {
+            void saveCoords(coordsRef.current);
           }
+        }
 
-          if (!containerRef.current) return;
+        markerRef.current.on("dragend", () => {
+          const point = markerRef.current?.getLatLng();
+          if (!point) return;
+          void saveCoords({ lat: point.lat, lng: point.lng });
+        });
 
-          const defaultCoords: Coords = coordsRef.current ?? { lat: -1.286389, lng: 36.817223 };
-          mapRef.current = L.map(containerRef.current).setView([defaultCoords.lat, defaultCoords.lng] as LatLngTuple, 13);
-
-          L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-            attribution: '&copy; OpenStreetMap contributors'
-          }).addTo(mapRef.current);
-
-          markerRef.current = L.marker([defaultCoords.lat, defaultCoords.lng] as LatLngTuple, { draggable: true }).addTo(mapRef.current);
-
-          if (coordsRef.current) {
-            const savedAddress = addressRef.current;
-            if (savedAddress) {
-              setLocationLabel(savedAddress.label);
-              onLocationChange?.({ ...coordsRef.current, address: savedAddress });
-            } else {
-              void saveCoords(coordsRef.current);
-            }
-          }
-
-          markerRef.current.on("dragend", () => {
-            const point = markerRef.current?.getLatLng();
-            if (!point) return;
-            void saveCoords({ lat: point.lat, lng: point.lng });
-          });
-
-          mapRef.current.on("click", (event: LeafletMouseEvent) => {
-            markerRef.current?.setLatLng(event.latlng);
-            void saveCoords({ lat: event.latlng.lat, lng: event.latlng.lng });
-          });
-        })().catch((error) => console.error(error));
+        mapRef.current.on("click", (event: LeafletMouseEvent) => {
+          markerRef.current?.setLatLng(event.latlng);
+          void saveCoords({ lat: event.latlng.lat, lng: event.latlng.lng });
+        });
       })
-      .catch((error) => console.error(error));
+      .catch((error: unknown) => {
+        if (!mounted) return;
+        console.error("Leaflet map failed to initialize:", error);
+        setMapError("The delivery map could not load. Refresh the page and try again.");
+      });
 
     return () => {
       mounted = false;
@@ -348,7 +326,13 @@ export default function DeliveryMap({
         </button>
       </div>
 
-      <div className="h-56 w-full overflow-hidden rounded-xl border border-slate-200 sm:h-64" ref={containerRef} />
+      <div
+        className="h-56 w-full overflow-hidden rounded-xl border border-slate-200 bg-slate-100 sm:h-64"
+        ref={containerRef}
+        role="application"
+        aria-label="Delivery location map"
+      />
+      {mapError && <p role="alert" className="mt-3 text-sm text-red-700">{mapError}</p>}
 
       <div className="mt-3 text-sm" aria-live="polite">
         {locationError ? (

@@ -115,7 +115,7 @@ export const products: LocalProduct[] = [
     name: "Engine Oil Filter",
     price: 1800,
     images: ["/placeholder-product.svg"],
-    seller: { shopName: "Moto Parts Hub" },
+    seller: { shopName: "Wise Accessories Store" },
     category: "Engine Parts",
     description: "High-quality oil filter that keeps your engine clean and protected.",
     stock: 14
@@ -125,7 +125,7 @@ export const products: LocalProduct[] = [
     name: "Suspension Shock Absorber",
     price: 9200,
     images: ["/placeholder-product.svg"],
-    seller: { shopName: "Ride Ready Shop" },
+    seller: { shopName: "Wise Accessories Store" },
     category: "Suspension",
     description: "Heavy-duty rear shock absorber built for stable handling and smooth rides.",
     stock: 6
@@ -135,7 +135,7 @@ export const products: LocalProduct[] = [
     name: "LED Headlight Unit",
     price: 5400,
     images: ["/placeholder-product.svg"],
-    seller: { shopName: "City Moto Spares" },
+    seller: { shopName: "Wise Accessories Store" },
     category: "Electrical",
     description: "Durable LED headlight unit for better visibility during night rides.",
     stock: 5

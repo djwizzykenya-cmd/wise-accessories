@@ -1,15 +1,96 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import apiClient from "@/lib/api";
+
+interface ConfirmedOrder {
+  id: string;
+  status: string;
+  total: number;
+}
 
 export default function OrderSuccess() {
+  const orderId = useSearchParams()?.get("orderId");
+  const [order, setOrder] = useState<ConfirmedOrder | null>(null);
+  const [loading, setLoading] = useState(Boolean(orderId));
+  const [error, setError] = useState("");
+  const [retryCount, setRetryCount] = useState(0);
+
+  useEffect(() => {
+    if (!orderId) {
+      setLoading(false);
+      setOrder(null);
+      return;
+    }
+
+    let active = true;
+    setLoading(true);
+    setError("");
+    apiClient.get(`/orders/mine/${encodeURIComponent(orderId)}`)
+      .then((response) => {
+        const confirmedOrder = response.data?.data as ConfirmedOrder | undefined;
+        if (!confirmedOrder?.id || confirmedOrder.id !== orderId) {
+          throw new Error("The order response did not match this reference.");
+        }
+        if (active) setOrder(confirmedOrder);
+      })
+      .catch((requestError: unknown) => {
+        console.error("Failed to verify order confirmation", requestError);
+        if (active) {
+          setOrder(null);
+          setError("We couldn’t verify this order. Check your order history or try again.");
+        }
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [orderId, retryCount]);
+
   return (
     <main className="min-h-screen bg-slate-50 py-20">
       <div className="mx-auto max-w-3xl rounded-3xl bg-white p-10 text-center shadow-lg">
-        <h1 className="text-3xl font-bold text-slate-900">Order placed</h1>
-      <p className="mt-4 text-slate-600">Thank you — your order is being processed. We&apos;ll notify you with tracking details.</p>
-        <div className="mt-6">
-          <Link href="/" className="rounded-full bg-red-600 px-5 py-3 text-white">Back to shop</Link>
+        <h1 className="text-3xl font-bold text-slate-900">
+          {loading ? "Checking your order…" : order ? "Order request received" : "No order confirmation"}
+        </h1>
+        <p className="mt-4 text-slate-600" role={error ? "alert" : undefined}>
+          {loading
+            ? "We’re verifying that your order was saved."
+            : order
+              ? "Your cash-on-delivery order has been submitted. Payment is due when your order is delivered."
+              : error || "We don’t have a confirmed order for this page. Return to the store to continue shopping."}
+        </p>
+        {order && (
+          <>
+            <p className="mt-3 break-all text-sm text-slate-500">
+              Order reference: <span className="font-semibold">{order.id}</span>
+            </p>
+            <p className="mt-2 font-bold text-slate-900">KES {order.total.toLocaleString("en-KE")}</p>
+          </>
+        )}
+        {error && (
+          <button
+            type="button"
+            onClick={() => setRetryCount((count) => count + 1)}
+            className="mt-5 rounded-full border border-slate-200 px-5 py-3 font-semibold text-slate-700 hover:border-red-500 hover:text-red-600"
+          >
+            Try again
+          </button>
+        )}
+        <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
+          {order && (
+            <Link href="/account" className="rounded-full bg-red-600 px-5 py-3 text-white">
+              Track this order
+            </Link>
+          )}
+          <Link href="/" className="rounded-full border border-slate-200 px-5 py-3 text-slate-700">
+            Back to shop
+          </Link>
         </div>
       </div>
     </main>

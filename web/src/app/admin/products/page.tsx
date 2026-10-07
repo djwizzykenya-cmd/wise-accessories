@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import axios from "axios";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
@@ -30,6 +31,8 @@ function AdminProductsContent() {
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [reloadCount, setReloadCount] = useState(0);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterCategory, setFilterCategory] = useState("");
   const [formState, setFormState] = useState({
@@ -43,8 +46,20 @@ function AdminProductsContent() {
   const [uploadedImages, setUploadedImages] = useState<string[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [error, setError] = useState("");
+
+  // Upload tasks track per-file progress and allow retrying failed uploads.
+  const [uploadTasks, setUploadTasks] = useState<Array<{
+    id: string;
+    name: string;
+    file: File | null;
+    progress: number;
+    status: "pending" | "uploading" | "success" | "error";
+    url?: string;
+    error?: string;
+  }>>([]);
   const [success, setSuccess] = useState("");
   const [saving, setSaving] = useState(false);
+  const [uploadingImages, setUploadingImages] = useState(false);
 
   useEffect(() => {
     if (!isReady) return;
@@ -61,6 +76,7 @@ function AdminProductsContent() {
 
     const loadData = async () => {
       setLoading(true);
+      setLoadError("");
       try {
         const [productsRes, categoriesRes] = await Promise.all([
           apiClient.get("/products/admin?limit=100"),
@@ -71,13 +87,14 @@ function AdminProductsContent() {
         setCategories(categoriesRes.data.data || []);
       } catch (err) {
         console.error(err);
+        setLoadError("Could not load products and categories. Check the API connection and try again.");
       } finally {
         setLoading(false);
       }
     };
 
     loadData();
-  }, [isReady, user, router]);
+  }, [isReady, user, router, reloadCount]);
 
   const handleEdit = (product: Product) => {
     setEditingId(product.id);
@@ -93,7 +110,7 @@ function AdminProductsContent() {
     window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
   };
 
-  const normalizeProduct = (product: any): Product => {
+  const normalizeProduct = (product: Product & { categoryId?: string }): Product => {
     const category =
       product?.category && typeof product.category === "object"
         ? product.category
@@ -148,18 +165,137 @@ function AdminProductsContent() {
     setFormState((prev) => ({ ...prev, [field]: value }));
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
 
-    Array.from(files).forEach((file) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64String = reader.result as string;
-        setUploadedImages((prev) => [...prev, base64String]);
-      };
-      reader.readAsDataURL(file);
-    });
+    const selectedFiles = Array.from(files);
+    e.target.value = "";
+
+    if (uploadedImages.length + selectedFiles.length > 5) {
+      setError("Upload no more than 5 product images.");
+      return;
+    }
+
+    const oversizedFile = selectedFiles.find((file) => file.size > 5 * 1024 * 1024);
+    if (oversizedFile) {
+      setError("Each image must be 5 MB or smaller.");
+      return;
+    }
+
+    setError("");
+
+    // Prepare per-file tasks and keep the File objects so we can retry if needed.
+    const tasks = selectedFiles.map((file) => ({
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      name: file.name,
+      file,
+      progress: 0,
+      status: "pending" as const
+    }));
+
+    setUploadTasks((prev) => [...prev, ...tasks]);
+    setUploadingImages(true);
+
+    const uploadSingle = async (taskId: string) => {
+      const task = uploadTasks.find((t) => t.id === taskId) || tasks.find((t) => t.id === taskId);
+      if (!task || !task.file) return;
+
+      // mark uploading
+      setUploadTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, status: "uploading", progress: 0 } : t)));
+
+      const formData = new FormData();
+      formData.append("images", task.file);
+
+      try {
+        const response = await apiClient.post("/uploads/images", formData, {
+          headers: { "Content-Type": "multipart/form-data" },
+          onUploadProgress: (progressEvent: any) => {
+            const loaded = progressEvent.loaded ?? 0;
+            const total = progressEvent.total ?? 0;
+            if (!total) return;
+            const prog = Math.round((loaded / total) * 100);
+            setUploadTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, progress: prog } : t)));
+          }
+        });
+
+        const imageUrls = response.data?.data?.images;
+        const url = Array.isArray(imageUrls) && imageUrls.length > 0 ? imageUrls[0] : undefined;
+        if (!url) throw new Error("Image storage returned an invalid response.");
+
+        setUploadedImages((prev) => [...prev, url]);
+        setUploadTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, status: "success", progress: 100, url } : t)));
+      } catch (err) {
+        console.error(err);
+        const message = axios.isAxiosError(err)
+          ? err.response?.data?.error || err.message
+          : err instanceof Error
+            ? err.message
+            : "Upload failed";
+        setUploadTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, status: "error", error: message } : t)));
+        setError(message || "Image upload failed. Please try again.");
+      }
+    };
+
+    // Upload in parallel but limit concurrency to avoid saturating the server (3 at a time)
+    const concurrency = 3;
+    const queue = [...tasks];
+    const workers: Promise<void>[] = [];
+    for (let i = 0; i < concurrency; i++) {
+      const worker = (async () => {
+        while (queue.length > 0) {
+          const t = queue.shift();
+          if (!t) break;
+          await uploadSingle(t.id);
+        }
+      })();
+      workers.push(worker);
+    }
+
+    await Promise.all(workers);
+    setUploadingImages(false);
+  };
+
+  const retryUpload = async (taskId: string) => {
+    const task = uploadTasks.find((t) => t.id === taskId);
+    if (!task || !task.file) return;
+    // reset error and retry
+    setUploadTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, status: "pending", error: undefined, progress: 0 } : t)));
+
+    // call the same uploadSingle logic by emulating selection: create a small uploader
+    setUploadingImages(true);
+    const formData = new FormData();
+    formData.append("images", task.file);
+    try {
+      setUploadTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, status: "uploading", progress: 0 } : t)));
+      const response = await apiClient.post("/uploads/images", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+        onUploadProgress: (progressEvent: any) => {
+          const loaded = progressEvent.loaded ?? 0;
+          const total = progressEvent.total ?? 0;
+          if (!total) return;
+          const prog = Math.round((loaded / total) * 100);
+          setUploadTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, progress: prog } : t)));
+        }
+      });
+
+      const imageUrls = response.data?.data?.images;
+      const url = Array.isArray(imageUrls) && imageUrls.length > 0 ? imageUrls[0] : undefined;
+      if (!url) throw new Error("Image storage returned an invalid response.");
+
+      setUploadedImages((prev) => [...prev, url]);
+      setUploadTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, status: "success", progress: 100, url } : t)));
+    } catch (err) {
+      const message = axios.isAxiosError(err)
+        ? err.response?.data?.error || err.message
+        : err instanceof Error
+          ? err.message
+          : "Upload failed";
+      setUploadTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, status: "error", error: message } : t)));
+      setError(message || "Image upload failed. Please try again.");
+    } finally {
+      setUploadingImages(false);
+    }
   };
 
   const removeImage = (index: number) => {
@@ -172,14 +308,21 @@ function AdminProductsContent() {
     setSuccess("");
     setSaving(true);
 
-    if (!formState.name.trim() || !formState.categoryId || !formState.price || !formState.stock) {
+    if (
+      !formState.name.trim() ||
+      !formState.categoryId ||
+      !formState.price.trim() ||
+      !formState.stock.trim()
+    ) {
       setError("Please fill in all required fields before saving.");
       setSaving(false);
       return;
     }
 
-    if (Number(formState.price) <= 0 || Number(formState.stock) < 0) {
-      setError("Price must be greater than 0 and stock cannot be negative.");
+    const price = Number(formState.price);
+    const stock = Number(formState.stock);
+    if (!Number.isFinite(price) || price <= 0 || !Number.isInteger(stock) || stock < 0) {
+      setError("Enter a valid price greater than 0 and a whole-number stock quantity of 0 or more.");
       setSaving(false);
       return;
     }
@@ -202,8 +345,8 @@ function AdminProductsContent() {
         name: formState.name.trim(),
         description: formState.description.trim(),
         categoryId: formState.categoryId,
-        price: Number(formState.price),
-        stock: Number(formState.stock),
+        price,
+        stock,
         images
       };
 
@@ -326,6 +469,17 @@ function AdminProductsContent() {
             <div className="mt-6 space-y-8">
               {loading ? (
                 <div className="rounded-3xl bg-slate-50 p-6 text-slate-500">Loading products…</div>
+              ) : loadError ? (
+                <div className="rounded-3xl border border-red-200 bg-red-50 p-6 text-red-700" role="alert">
+                  <p>{loadError}</p>
+                  <button
+                    type="button"
+                    onClick={() => setReloadCount((count) => count + 1)}
+                    className="mt-3 rounded-full bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700"
+                  >
+                    Try again
+                  </button>
+                </div>
               ) : filteredProducts.length === 0 ? (
                 <div className="rounded-3xl bg-slate-50 p-6 text-slate-500">
                   <p className="font-semibold text-slate-900">No products match your search.</p>
@@ -359,7 +513,7 @@ function AdminProductsContent() {
                             <div className="flex items-start gap-4">
                               <div className="w-20 h-20 overflow-hidden rounded-2xl bg-slate-100 border border-slate-200">
                                 <Image
-                                  src={product.images?.[0] || "/placeholder.png"}
+                                  src={product.images?.[0] || "/placeholder-product.svg"}
                                   alt={product.name}
                                   width={80}
                                   height={80}
@@ -447,6 +601,8 @@ function AdminProductsContent() {
                   <label className="block text-sm font-medium text-slate-700">Price</label>
                   <input
                     type="number"
+                    min="0.01"
+                    step="0.01"
                     value={formState.price}
                     onChange={(e) => handleChange("price", e.target.value)}
                     className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none focus:border-red-400 focus:ring-2 focus:ring-red-100"
@@ -457,6 +613,8 @@ function AdminProductsContent() {
                   <label className="block text-sm font-medium text-slate-700">Stock</label>
                   <input
                     type="number"
+                    min="0"
+                    step="1"
                     value={formState.stock}
                     onChange={(e) => handleChange("stock", e.target.value)}
                     className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none focus:border-red-400 focus:ring-2 focus:ring-red-100"
@@ -471,17 +629,49 @@ function AdminProductsContent() {
                   <label className="flex items-center justify-center w-full px-4 py-6 border-2 border-dashed border-slate-300 rounded-2xl cursor-pointer hover:border-red-400 hover:bg-red-50 transition">
                     <div className="text-center">
                       <p className="text-sm font-medium text-slate-700">📷 Click to upload images</p>
-                      <p className="text-xs text-slate-500 mt-1">PNG, JPG, GIF up to 5MB each</p>
+                      <p className="text-xs text-slate-500 mt-1">JPEG, PNG, WebP or GIF; up to 5 MB each, 5 images total</p>
                     </div>
                     <input
                       type="file"
                       multiple
-                      accept="image/*"
+                      accept="image/jpeg,image/png,image/webp,image/gif"
                       onChange={handleFileUpload}
                       className="hidden"
+                      disabled={uploadingImages || saving}
                     />
                   </label>
                 </div>
+
+                {uploadTasks.length > 0 && (
+                  <div className="mt-4">
+                    <p className="text-sm font-medium text-slate-700 mb-3">Uploading ({uploadTasks.length})</p>
+                    <div className="space-y-3">
+                      {uploadTasks.map((t) => (
+                        <div key={t.id} className="flex items-center gap-3 rounded-lg border border-slate-100 p-3">
+                          <div className="flex-1">
+                            <div className="flex items-center justify-between">
+                              <div className="text-sm font-medium text-slate-700 truncate">{t.name}</div>
+                              <div className="text-xs text-slate-500">{t.status}</div>
+                            </div>
+                            <div className="w-full bg-slate-100 h-2 rounded overflow-hidden mt-2">
+                              <div style={{ width: `${t.progress}%` }} className="h-2 bg-red-600" />
+                            </div>
+                            {t.error && <div className="text-xs text-red-600 mt-1">{t.error}</div>}
+                          </div>
+                          {t.status === "error" ? (
+                            <button
+                              type="button"
+                              onClick={() => retryUpload(t.id)}
+                              className="rounded-full bg-yellow-500 px-3 py-1 text-xs text-white"
+                            >
+                              Retry
+                            </button>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {uploadedImages.length > 0 && (
                   <div className="mt-4">
@@ -519,16 +709,17 @@ function AdminProductsContent() {
                 />
               </div>
 
+              {uploadingImages && <p className="text-sm text-slate-500">Uploading images to secure storage…</p>}
               {error && <p className="text-sm text-red-600">{error}</p>}
               {success && <p className="text-sm text-emerald-600">{success}</p>}
 
               <div className="flex gap-2">
                 <button
                   type="submit"
-                  disabled={saving}
+                  disabled={saving || uploadingImages}
                   className="flex-1 rounded-2xl bg-red-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-slate-400"
                 >
-                  {saving ? "Saving…" : editingId ? "Update Product" : "Add Product"}
+                  {uploadingImages ? "Uploading images…" : saving ? "Saving…" : editingId ? "Update Product" : "Add Product"}
                 </button>
                 {editingId && (
                   <button

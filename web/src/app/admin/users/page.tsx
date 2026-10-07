@@ -10,7 +10,7 @@ interface User {
   id: string;
   name: string;
   email: string;
-  userType: "customer" | "seller" | "admin";
+  userType: string;
   createdAt: string;
 }
 
@@ -19,6 +19,8 @@ function AdminUsersContent() {
   const router = useRouter();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterType, setFilterType] = useState<string>("all");
 
@@ -30,31 +32,56 @@ function AdminUsersContent() {
       return;
     }
 
+    let mounted = true;
     const loadUsers = async () => {
-      setLoading(false);
+      setLoading(true);
+      setLoadError(null);
       try {
         const response = await apiClient.get("/users");
-        setUsers(response.data.data || []);
-      } catch (err) {
-        console.error(err);
-        // Mock data for demo
-        setUsers([
-          { id: "1", name: "John Doe", email: "john@example.com", userType: "customer", createdAt: "2026-01-15" },
-          { id: "2", name: "Jane Smith", email: "jane@example.com", userType: "seller", createdAt: "2026-01-20" },
-          { id: "3", name: "Mike Johnson", email: "mike@example.com", userType: "customer", createdAt: "2026-02-10" },
-          { id: "4", name: "Sarah Wilson", email: "sarah@example.com", userType: "seller", createdAt: "2026-02-15" },
-          { id: "5", name: "Tom Brown", email: "tom@example.com", userType: "customer", createdAt: "2026-03-01" },
-          { id: "6", name: "Emily Davis", email: "emily@example.com", userType: "customer", createdAt: "2026-03-10" },
-        ]);
+        const records = response.data?.data;
+        if (!Array.isArray(records)) {
+          throw new Error("The users response was not a list.");
+        }
+
+        const normalizedUsers = records.map((record: Record<string, unknown>, index: number) => {
+          const firstName = typeof record.firstName === "string" ? record.firstName.trim() : "";
+          const lastName = typeof record.lastName === "string" ? record.lastName.trim() : "";
+          const email = typeof record.email === "string" ? record.email : "";
+          const name = [firstName, lastName].filter(Boolean).join(" ")
+            || (typeof record.name === "string" ? record.name : "")
+            || email
+            || "Unnamed user";
+
+          return {
+            id: typeof record.id === "string" ? record.id : `${email || "user"}-${index}`,
+            name,
+            email: email || "No email provided",
+            userType: typeof record.userType === "string" ? record.userType.toLowerCase() : "unknown",
+            createdAt: typeof record.createdAt === "string" ? record.createdAt : ""
+          };
+        });
+
+        if (mounted) setUsers(normalizedUsers);
+      } catch {
+        if (mounted) {
+          setUsers([]);
+          setLoadError("We couldn't load users. Check your connection and try again.");
+        }
+      } finally {
+        if (mounted) setLoading(false);
       }
     };
 
     loadUsers();
-  }, [isReady, user, router]);
+
+    return () => {
+      mounted = false;
+    };
+  }, [isReady, user, router, reloadKey]);
 
   const filteredUsers = users.filter((u) => {
-    const matchesSearch = u.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      u.email.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = u.name.toLowerCase().includes(searchTerm.toLowerCase())
+      || u.email.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesFilter = filterType === "all" || u.userType === filterType;
     return matchesSearch && matchesFilter;
   });
@@ -63,8 +90,6 @@ function AdminUsersContent() {
     switch (type) {
       case "admin":
         return "bg-purple-100 text-purple-800";
-      case "seller":
-        return "bg-blue-100 text-blue-800";
       case "customer":
         return "bg-green-100 text-green-800";
       default:
@@ -72,7 +97,7 @@ function AdminUsersContent() {
     }
   };
 
-  if (!isReady || !user) {
+  if (!isReady || !user || user.userType !== "admin") {
     return (
       <main className="min-h-screen bg-slate-50 flex items-center justify-center px-4 py-20">
         <div className="rounded-3xl bg-white p-10 shadow-lg text-center">
@@ -91,7 +116,7 @@ function AdminUsersContent() {
             <div>
               <p className="text-sm uppercase tracking-[0.2em] text-purple-600">Admin Users</p>
               <h1 className="mt-2 text-3xl font-bold text-slate-900">User Management</h1>
-              <p className="mt-2 text-sm text-slate-500">Manage customers, sellers and admins.</p>
+              <p className="mt-2 text-sm text-slate-500">Manage customer and admin accounts.</p>
             </div>
             <Link
               href="/admin"
@@ -111,6 +136,7 @@ function AdminUsersContent() {
                 <input
                   type="text"
                   placeholder="Search by name or email..."
+                  aria-label="Search users by name or email"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none focus:border-purple-400 focus:ring-2 focus:ring-purple-100"
@@ -123,26 +149,37 @@ function AdminUsersContent() {
               >
                 <option value="all">All Users</option>
                 <option value="customer">Customers</option>
-                <option value="seller">Sellers</option>
                 <option value="admin">Admins</option>
               </select>
             </div>
 
             {/* Users List */}
             {loading ? (
-              <div className="text-center text-slate-500 py-12">Loading users...</div>
+              <div className="py-12 text-center text-slate-500" role="status">Loading users...</div>
+            ) : loadError ? (
+              <div role="alert" className="rounded-2xl border border-red-200 bg-red-50 px-5 py-8 text-center">
+                <p className="font-semibold text-red-900">{loadError}</p>
+                <button
+                  type="button"
+                  onClick={() => setReloadKey((key) => key + 1)}
+                  className="mt-4 rounded-full bg-red-700 px-5 py-2.5 text-sm font-semibold text-white hover:bg-red-800"
+                >
+                  Try again
+                </button>
+              </div>
             ) : filteredUsers.length === 0 ? (
-              <div className="text-center text-slate-500 py-12">No users found.</div>
+              <div className="text-center text-slate-500 py-12">
+                {users.length === 0 ? "No users have registered yet." : "No users match your search."}
+              </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="w-full text-sm" aria-label="Marketplace users">
                   <thead>
                     <tr className="border-b border-slate-200">
                       <th className="px-4 py-3 text-left font-semibold text-slate-900">Name</th>
                       <th className="px-4 py-3 text-left font-semibold text-slate-900">Email</th>
                       <th className="px-4 py-3 text-left font-semibold text-slate-900">Type</th>
                       <th className="px-4 py-3 text-left font-semibold text-slate-900">Joined</th>
-                      <th className="px-4 py-3 text-left font-semibold text-slate-900">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -152,12 +189,13 @@ function AdminUsersContent() {
                         <td className="px-4 py-3 text-slate-600">{u.email}</td>
                         <td className="px-4 py-3">
                           <span className={`inline-block rounded-full px-3 py-1 text-xs font-semibold ${getUserBadgeColor(u.userType)}`}>
-                            {u.userType.charAt(0).toUpperCase() + u.userType.slice(1)}
+                            {u.userType ? u.userType.charAt(0).toUpperCase() + u.userType.slice(1) : "Unknown"}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-slate-600">{new Date(u.createdAt).toLocaleDateString()}</td>
-                        <td className="px-4 py-3">
-                          <button className="text-blue-600 hover:text-blue-800 font-medium text-sm">View</button>
+                        <td className="px-4 py-3 text-slate-600">
+                          {u.createdAt && !Number.isNaN(Date.parse(u.createdAt))
+                            ? new Date(u.createdAt).toLocaleDateString()
+                            : "—"}
                         </td>
                       </tr>
                     ))}
@@ -167,18 +205,14 @@ function AdminUsersContent() {
             )}
 
             {/* Stats */}
-            <div className="grid grid-cols-3 gap-4 pt-6 border-t border-slate-200">
+            <div className="grid grid-cols-2 gap-4 pt-6 border-t border-slate-200">
               <div className="text-center">
                 <p className="text-2xl font-bold text-slate-900">{users.filter(u => u.userType === "customer").length}</p>
                 <p className="text-sm text-slate-500 mt-1">👥 Customers</p>
               </div>
               <div className="text-center">
-                <p className="text-2xl font-bold text-slate-900">{users.filter(u => u.userType === "seller").length}</p>
-                <p className="text-sm text-slate-500 mt-1">🏪 Sellers</p>
-              </div>
-              <div className="text-center">
                 <p className="text-2xl font-bold text-slate-900">{users.length}</p>
-                <p className="text-sm text-slate-500 mt-1">📊 Total Users</p>
+                <p className="text-sm text-slate-500 mt-1">📊 Customers and admins</p>
               </div>
             </div>
           </div>

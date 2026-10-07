@@ -1,67 +1,105 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import Link from "next/link";
+import apiClient from "@/lib/api";
+
+interface RecentProduct {
+  id: string;
+  name: string;
+  createdAt: string;
+}
 
 function AdminDashboard() {
   const { user, isReady } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
 
-    const [counts, setCounts] = useState<{
-      products: number | null;
-      users: number | null;
-      sellers: number | null;
-      orders: number | null;
-    }>({ products: null, users: null, sellers: null, orders: null });
-    const [statsLoading, setStatsLoading] = useState(true);
-    const [statsError, setStatsError] = useState<string | null>(null);
+  const [counts, setCounts] = useState<{
+    products: number | null;
+    users: number | null;
+    orders: number | null;
+  }>({ products: null, users: null, orders: null });
+  const [recentProducts, setRecentProducts] = useState<RecentProduct[]>([]);
+  const [statsLoading, setStatsLoading] = useState(true);
+  const [statsError, setStatsError] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
-    useEffect(() => {
-      if (!isReady) return;
+  useEffect(() => {
+    if (!isReady) return;
 
-      if (!user || user.userType !== "admin") {
-        router.replace("/");
-        return;
-      }
+    if (!user || user.userType !== "admin") {
+      router.replace("/");
+      return;
+    }
 
-      let mounted = true;
+    if (pathname !== "/admin") return;
 
-      const loadStats = async () => {
-        setStatsLoading(true);
-        setStatsError(null);
+    let mounted = true;
 
-        try {
-          const prodRes = await (await import("@/lib/api")).default.get("/products/admin?limit=1");
-          const productsTotal = prodRes.data?.meta?.total ?? (Array.isArray(prodRes.data?.data) ? prodRes.data.data.length : null);
+    const loadStats = async () => {
+      setStatsLoading(true);
+      setStatsError(null);
 
-          const usersRes = await (await import("@/lib/api")).default.get("/users");
-          const usersTotal = Array.isArray(usersRes.data?.data) ? usersRes.data.data.length : null;
+      try {
+        const [productsRes, usersRes, ordersRes] = await Promise.all([
+          apiClient.get("/products/admin?limit=3"),
+          apiClient.get("/users"),
+          apiClient.get("/orders")
+        ]);
 
-          const sellersRes = await (await import("@/lib/api")).default.get("/sellers");
-          const sellersTotal = Array.isArray(sellersRes.data?.data) ? sellersRes.data.data.length : null;
-
-          const ordersRes = await (await import("@/lib/api")).default.get("/orders");
-          const ordersTotal = Array.isArray(ordersRes.data?.data) ? ordersRes.data.data.length : null;
-
-          if (!mounted) return;
-          setCounts({ products: productsTotal, users: usersTotal, sellers: sellersTotal, orders: ordersTotal });
-        } catch (err: unknown) {
-          console.warn("Failed to load admin stats", err);
-          if (!mounted) return;
-          setStatsError("Could not load stats");
-        } finally {
-          if (mounted) setStatsLoading(false);
+        const productsData = productsRes.data?.data;
+        const productsTotal = productsRes.data?.meta?.total;
+        if (!Array.isArray(productsData) || typeof productsTotal !== "number") {
+          throw new Error("The products response did not contain a valid count.");
         }
-      };
 
-      loadStats();
+        const usersTotal = Array.isArray(usersRes.data?.data) ? usersRes.data.data.length : null;
+        const ordersTotal = Array.isArray(ordersRes.data?.data) ? ordersRes.data.data.length : null;
+        const latestProducts = productsData
+          .filter((product: unknown): product is Record<string, unknown> =>
+            typeof product === "object" && product !== null
+          )
+          .map((product) => ({
+            id: typeof product.id === "string" ? product.id : "",
+            name: typeof product.name === "string" ? product.name : "Unnamed product",
+            createdAt: typeof product.createdAt === "string" ? product.createdAt : ""
+          }))
+          .filter((product) => product.id);
 
-      return () => {
-        mounted = false;
-      };
-    }, [isReady, user, router]);
+        if (!mounted) return;
+        setCounts({ products: productsTotal, users: usersTotal, orders: ordersTotal });
+        setRecentProducts(latestProducts);
+      } catch (err: unknown) {
+        console.warn("Failed to load admin stats", err);
+        if (!mounted) return;
+        setCounts({ products: null, users: null, orders: null });
+        setRecentProducts([]);
+        setStatsError("Could not load the latest dashboard data.");
+      } finally {
+        if (mounted) setStatsLoading(false);
+      }
+    };
+
+    setCounts({ products: null, users: null, orders: null });
+    void loadStats();
+
+    const handleRefresh = () => {
+      if (document.visibilityState === "visible") void loadStats();
+    };
+    window.addEventListener("focus", handleRefresh);
+    window.addEventListener("pageshow", handleRefresh);
+    document.addEventListener("visibilitychange", handleRefresh);
+
+    return () => {
+      mounted = false;
+      window.removeEventListener("focus", handleRefresh);
+      window.removeEventListener("pageshow", handleRefresh);
+      document.removeEventListener("visibilitychange", handleRefresh);
+    };
+  }, [isReady, user, router, pathname, refreshKey]);
 
   if (!isReady || !user) {
     return (
@@ -85,36 +123,46 @@ function AdminDashboard() {
         </div>
 
         {/* Quick Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-2xl font-bold text-slate-900">Marketplace overview</h2>
+          <button
+            type="button"
+            onClick={() => setRefreshKey((key) => key + 1)}
+            disabled={statsLoading}
+            className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-red-300 hover:text-red-600 disabled:cursor-wait disabled:opacity-60"
+          >
+            {statsLoading ? "Refreshing…" : "Refresh stats"}
+          </button>
+        </div>
+        {statsError && (
+          <p role="alert" className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            {statsError} Use “Refresh stats” to try again.
+          </p>
+        )}
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
           <div className="bg-white rounded-2xl shadow-md p-6 border-l-4 border-blue-500">
             <p className="text-slate-600 text-sm font-semibold uppercase">Total Products</p>
             <p className="text-3xl font-bold text-slate-900 mt-2">{statsLoading ? "Loading..." : counts.products ?? "—"}</p>
-            <p className="text-green-600 text-xs mt-2">{statsError ? "" : "📈 +12 this week"}</p>
+            <p className="text-slate-500 text-xs mt-2">Live catalog count</p>
           </div>
 
           <div className="bg-white rounded-2xl shadow-md p-6 border-l-4 border-green-500">
             <p className="text-slate-600 text-sm font-semibold uppercase">Total Users</p>
             <p className="text-3xl font-bold text-slate-900 mt-2">{statsLoading ? "Loading..." : counts.users ?? "—"}</p>
-            <p className="text-green-600 text-xs mt-2">{statsError ? "" : "👥 +89 this week"}</p>
-          </div>
-
-          <div className="bg-white rounded-2xl shadow-md p-6 border-l-4 border-purple-500">
-            <p className="text-slate-600 text-sm font-semibold uppercase">Active Sellers</p>
-            <p className="text-3xl font-bold text-slate-900 mt-2">{statsLoading ? "Loading..." : counts.sellers ?? "—"}</p>
-            <p className="text-green-600 text-xs mt-2">{statsError ? "" : "🏪 +3 approved"}</p>
+            <p className="text-slate-500 text-xs mt-2">Registered accounts</p>
           </div>
 
           <div className="bg-white rounded-2xl shadow-md p-6 border-l-4 border-orange-500">
-            <p className="text-slate-600 text-sm font-semibold uppercase">Pending Orders</p>
+            <p className="text-slate-600 text-sm font-semibold uppercase">Total Orders</p>
             <p className="text-3xl font-bold text-slate-900 mt-2">{statsLoading ? "Loading..." : counts.orders ?? "—"}</p>
-            <p className="text-orange-600 text-xs mt-2">{statsError ? "" : "⚠️ Needs attention"}</p>
+            <p className="text-slate-500 text-xs mt-2">Marketplace orders</p>
           </div>
         </div>
 
         {/* Management Sections */}
         <div>
           <h2 className="text-2xl font-bold text-slate-900 mb-6">Management Sections</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
             {/* Products Card */}
             <Link
               href="/admin/products"
@@ -145,21 +193,6 @@ function AdminDashboard() {
               </div>
             </Link>
 
-            {/* Sellers Card */}
-            <Link
-              href="/admin/sellers"
-              className="bg-white rounded-2xl shadow-md hover:shadow-xl transition-all hover:scale-105 p-6 border-l-4 border-purple-500 cursor-pointer"
-            >
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-xl font-semibold text-slate-900">Sellers</h3>
-                <span className="text-4xl">🏪</span>
-              </div>
-              <p className="text-slate-600 text-sm">Approve, review and manage seller partnerships</p>
-              <div className="mt-4 flex items-center text-purple-600 font-semibold text-sm hover:text-purple-800">
-                Go to Sellers →
-              </div>
-            </Link>
-
             {/* Orders Card */}
             <Link
               href="/admin/orders"
@@ -177,32 +210,34 @@ function AdminDashboard() {
           </div>
         </div>
 
-        {/* Recent Activity */}
+        {/* Recently Added Products */}
         <div className="bg-white rounded-2xl shadow-md p-6">
-          <h2 className="text-xl font-bold text-slate-900 mb-4">Recent Activity</h2>
-          <div className="space-y-3">
-            <div className="flex items-center justify-between p-3 border-l-4 border-blue-500 bg-blue-50 rounded-lg">
-              <div>
-                <p className="text-sm font-semibold text-slate-900">5 new products added</p>
-                <p className="text-xs text-slate-500">2 hours ago</p>
-              </div>
-              <span>📦</span>
-            </div>
-            <div className="flex items-center justify-between p-3 border-l-4 border-green-500 bg-green-50 rounded-lg">
-              <div>
-                <p className="text-sm font-semibold text-slate-900">New seller registered: Tech Store</p>
-                <p className="text-xs text-slate-500">5 hours ago</p>
-              </div>
-              <span>🏪</span>
-            </div>
-            <div className="flex items-center justify-between p-3 border-l-4 border-orange-500 bg-orange-50 rounded-lg">
-              <div>
-                <p className="text-sm font-semibold text-slate-900">12 new orders received</p>
-                <p className="text-xs text-slate-500">8 hours ago</p>
-              </div>
-              <span>📋</span>
-            </div>
+          <div className="mb-4 flex items-center justify-between gap-4">
+            <h2 className="text-xl font-bold text-slate-900">Recently Added Products</h2>
+            <Link href="/admin/products" className="text-sm font-semibold text-red-600 hover:text-red-700">
+              Manage products
+            </Link>
           </div>
+          {statsLoading ? (
+            <p className="py-4 text-sm text-slate-500" role="status">Loading recent products…</p>
+          ) : recentProducts.length > 0 ? (
+            <ul className="divide-y divide-slate-100">
+              {recentProducts.map((product) => (
+                <li key={product.id} className="flex items-center justify-between gap-4 py-3 first:pt-0 last:pb-0">
+                  <span className="min-w-0 truncate text-sm font-semibold text-slate-900">{product.name}</span>
+                  <time className="shrink-0 text-xs text-slate-500">
+                    {product.createdAt && !Number.isNaN(Date.parse(product.createdAt))
+                      ? new Date(product.createdAt).toLocaleDateString()
+                      : "Date unavailable"}
+                  </time>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="py-4 text-sm text-slate-500">
+              {statsError ? "Recent products are unavailable." : "No products have been added yet."}
+            </p>
+          )}
         </div>
 
         {/* Footer */}

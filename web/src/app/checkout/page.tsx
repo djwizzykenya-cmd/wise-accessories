@@ -42,7 +42,8 @@ const isDeliveryLocation = (value: unknown): value is DeliveryLocation => {
 
 const PAYMENT_METHODS = [
   { value: "cash_on_delivery", label: "Cash on delivery", available: true },
-  { value: "mobile_money", label: "M-Pesa", available: false }
+  { value: "mobile_money", label: "M-Pesa", available: false },
+  { value: "card", label: "Card payment", available: false }
 ];
 
 export default function CheckoutPage() {
