@@ -39,9 +39,8 @@ const isDeliveryLocation = (value: unknown): value is DeliveryLocation => {
 };
 
 const PAYMENT_METHODS = [
-  { value: "cash_on_delivery", label: "Cash on delivery" },
-  { value: "mobile_money", label: "M-Pesa" },
-  { value: "card", label: "Card payment" }
+  { value: "cash_on_delivery", label: "Cash on delivery", available: true },
+  { value: "mobile_money", label: "M-Pesa", available: false }
 ];
 
 export default function CheckoutPage() {
@@ -249,10 +248,13 @@ export default function CheckoutPage() {
                       name="paymentMethod"
                       value={method.value}
                       checked={paymentMethod === method.value}
-                      onChange={() => setPaymentMethod(method.value)}
+                      onChange={() => method.available && setPaymentMethod(method.value)}
+                      disabled={!method.available}
                       className="h-4 w-4 accent-red-600"
                     />
-                    <span className="font-medium text-slate-900">{method.label}</span>
+                    <span className={`font-medium ${method.available ? "text-slate-900" : "text-slate-500"}`}>
+                      {method.label}{!method.available && " (not available yet)"}
+                    </span>
                   </label>
                 ))}
               </div>
