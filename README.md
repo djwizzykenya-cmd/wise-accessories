@@ -184,18 +184,18 @@ Notes:
 
 ### GitHub Actions (CI & Deploy)
 
-This repository includes two GitHub Actions workflows to help keep the `web` app online:
+This repository includes GitHub Actions workflows for the `web` app:
 
 - `.github/workflows/web-ci.yml` — runs `npm run build --prefix web` on pushes and PRs to `main`/`master`.
-- `.github/workflows/deploy-vercel.yml` — deploys the `web` app to Vercel on pushes to `main`/`master` using the Vercel CLI.
+- `.github/workflows/deploy-vercel.yml` — optionally deploys the `web` app to Vercel using the CLI when its GitHub secrets are configured. Without those secrets, the CLI step is skipped; Vercel's native Git integration can deploy pushes to the connected production branch directly.
 
-Before using the deploy workflow, add the following GitHub repository secrets (Repository → Settings → Secrets & variables → Actions):
+To enable the optional CLI deploy, add the following GitHub repository secrets (Repository → Settings → Secrets & variables → Actions):
 
  - `VERCEL_TOKEN` — your Vercel personal token (create at https://vercel.com/account/tokens).
  - `VERCEL_ORG_ID` — your Vercel organization id (optional but recommended).
  - `VERCEL_PROJECT_ID` — your Vercel project id (optional but recommended).
 
-The deploy workflow uses the Vercel CLI and the token to trigger a production deployment of the `web` folder. If you'd prefer Vercel's native Git integration instead of the CLI, you can skip adding these secrets and connect the repository through the Vercel dashboard.
+The CLI workflow uses these values to trigger a production deployment of the `web` folder. If Vercel's native Git integration is already connected to `main`/`master`, no GitHub deployment secrets are needed.
 
 
 ## Contributing
