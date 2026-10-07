@@ -399,7 +399,7 @@ export default function ProductDetailClient({ productId }: { productId: string }
 
             <div className="rounded-3xl bg-white p-6 shadow-sm">
               <h2 className="text-xl font-semibold text-slate-900">Product Description</h2>
-              <p className="mt-4 text-sm leading-7 text-slate-600">{product.description || "This product is a premium motorcycle spare part sourced from our trusted sellers. It is designed for durability and great value."}</p>
+              <p className="mt-4 text-sm leading-7 text-slate-600">{product.description || "A motorcycle spare part selected for reliable performance and value from the Wise Accessories Store."}</p>
             </div>
           </div>
         </div>
@@ -411,7 +411,7 @@ export default function ProductDetailClient({ productId }: { productId: string }
           </div>
           <div className="rounded-3xl bg-white p-6 text-center shadow-sm">
             <p className="text-sm uppercase tracking-[0.24em] text-slate-500">Delivery</p>
-            <p className="mt-3 text-lg font-semibold text-slate-900">Fast shipping Kenya-wide</p>
+            <p className="mt-3 text-lg font-semibold text-slate-900">Delivery across Kenya</p>
           </div>
           <div className="rounded-3xl bg-white p-6 text-center shadow-sm">
             <p className="text-sm uppercase tracking-[0.24em] text-slate-500">Seller</p>

@@ -144,7 +144,7 @@ export default function ProductsPage() {
             <p className="mt-2 text-sm text-slate-600">
               {selectedCategory
                 ? `Shop motorcycle spares in ${selectedCategory.name}.`
-                : "Shop motorcycle spares from verified sellers."}
+                : "Browse motorcycle spares from the Wise Accessories Store."}
             </p>
           </div>
           <Link href="/" className="text-red-600 hover:underline">
