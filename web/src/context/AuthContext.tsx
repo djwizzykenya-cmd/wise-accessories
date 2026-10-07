@@ -22,8 +22,18 @@ interface AuthContextType {
   user: AuthUser | null;
   isReady: boolean;
   login: (email: string, password: string) => Promise<AuthUser>;
+  register: (input: RegisterInput) => Promise<AuthUser>;
   logout: () => void;
   isAuthenticated: boolean;
+}
+
+export interface RegisterInput {
+  firstName: string;
+  lastName: string;
+  email: string;
+  password: string;
+  phone?: string;
+  userType: "customer";
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -38,25 +48,45 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   useEffect(() => {
     const savedToken = localStorage.getItem("token");
     const savedUser = localStorage.getItem("user");
-    if (savedToken) {
-      setToken(savedToken);
-    }
     if (savedUser) {
-      setUser(JSON.parse(savedUser));
+      const parsedUser = JSON.parse(savedUser) as AuthUser;
+      if (parsedUser.userType === "seller") {
+        localStorage.removeItem("token");
+        localStorage.removeItem("user");
+      } else {
+        setUser(parsedUser);
+        if (savedToken) setToken(savedToken);
+      }
+    } else if (savedToken) {
+      setToken(savedToken);
     }
     setIsReady(true);
   }, []);
 
   const login = async (email: string, password: string): Promise<AuthUser> => {
     const response = await apiClient.post("/auth/login", {
-      email,
+      email: email.trim().toLowerCase(),
       password
     });
 
-    const { token: authToken, user: authUser } = response.data.data as {
-      token: string;
-      user: AuthUser;
-    };
+    const { token: authToken, user: authUser } = response.data.data as { token: string; user: AuthUser };
+    setToken(authToken);
+    setUser(authUser);
+    localStorage.setItem("token", authToken);
+    localStorage.setItem("user", JSON.stringify(authUser));
+    return authUser;
+  };
+
+  const register = async (input: RegisterInput): Promise<AuthUser> => {
+    const response = await apiClient.post("/auth/register", {
+      ...input,
+      firstName: input.firstName.trim(),
+      lastName: input.lastName.trim(),
+      email: input.email.trim().toLowerCase(),
+      phone: input.phone?.trim() || undefined
+    });
+
+    const { token: authToken, user: authUser } = response.data.data as { token: string; user: AuthUser };
     setToken(authToken);
     setUser(authUser);
     localStorage.setItem("token", authToken);
@@ -82,6 +112,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         user,
         isReady,
         login,
+        register,
         logout,
         isAuthenticated: !!token
       }}
