@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useCart } from "@/context/CartContext";
 import DeliveryMap, { type DeliveryLocation } from "@/components/DeliveryMap";
 import { useSearchParams, useRouter } from "next/navigation";
+import axios from "axios";
 import apiClient from "@/lib/api";
 import { products as localProducts } from "@/data/products";
+import { useAuth } from "@/context/AuthContext";
 
 interface QuickBuyProduct {
   id: string;
@@ -44,18 +46,22 @@ const PAYMENT_METHODS = [
 ];
 
 export default function CheckoutPage() {
-  const { items, total, addItem } = useCart();
+  const { items, total, addItem, clear } = useCart();
+  const { user } = useAuth();
   const searchParams = useSearchParams();
   const router = useRouter();
+  const productId = searchParams?.get("product") ?? null;
 
   const [deliveryLocation, setDeliveryLocation] = useState<DeliveryLocation | null>(null);
   const [deliveryLookupLoading, setDeliveryLookupLoading] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState("cash_on_delivery");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [quickBuyLoading, setQuickBuyLoading] = useState(Boolean(productId));
+  const [quickBuyError, setQuickBuyError] = useState("");
+  const [quickBuyRetry, setQuickBuyRetry] = useState(0);
 
-  const productId = searchParams?.get("product") ?? null;
-  const processedQuickBuyIds = useMemo(() => new Set<string>(), []);
+  const processedQuickBuyIds = useRef(new Set<string>());
 
   useEffect(() => {
     try {
@@ -71,9 +77,13 @@ export default function CheckoutPage() {
   }, []);
 
   useEffect(() => {
-    if (!productId || processedQuickBuyIds.has(productId)) {
+    if (!productId || processedQuickBuyIds.current.has(productId)) {
       return;
     }
+
+    processedQuickBuyIds.current.add(productId);
+    setQuickBuyLoading(true);
+    setQuickBuyError("");
 
     const addQuickBuyItem = (product: { id: string; name: string; price: number; images?: string[] }) => {
       addItem({
@@ -88,59 +98,55 @@ export default function CheckoutPage() {
     const loadProduct = async () => {
       try {
         const res = await apiClient.get(`/products/${productId}`);
-        const p = res.data.data;
-        if (p) {
-          addQuickBuyItem(p);
+        const product: unknown = res.data?.data;
+        if (
+          typeof product === "object" &&
+          product !== null &&
+          "id" in product &&
+          product.id === productId &&
+          "name" in product &&
+          typeof product.name === "string" &&
+          "price" in product &&
+          typeof product.price === "number" &&
+          Number.isFinite(product.price) &&
+          product.price >= 0
+        ) {
+          addQuickBuyItem(product as QuickBuyProduct);
           return;
         }
-      } catch (e) {
-        console.error("Failed to load product for quick buy via API", e);
+        throw new Error("The product response was invalid.");
+      } catch (requestError) {
+        console.error("Failed to load product for quick buy via API", requestError);
       }
 
-      try {
+      if (process.env.NODE_ENV !== "production") {
         const localProduct = localProducts.find((item) => item.id === productId);
         if (localProduct) {
           addQuickBuyItem(localProduct);
           return;
         }
-      } catch (err) {
-        console.error("Local product fallback failed", err);
       }
 
-      try {
-        const r = await fetch(`/products.json`);
-        const data = (await r.json()) as unknown;
-
-        if (Array.isArray(data)) {
-          const p = data.find(
-            (x): x is QuickBuyProduct =>
-              typeof x === "object" &&
-              x !== null &&
-              "id" in x &&
-              typeof (x as Record<string, unknown>).id === "string" &&
-              (x as Record<string, unknown>).id === productId &&
-              "name" in x &&
-              typeof (x as Record<string, unknown>).name === "string" &&
-              "price" in x &&
-              typeof (x as Record<string, unknown>).price === "number"
-          );
-
-          if (p) {
-            addQuickBuyItem(p);
-          }
-        }
-      } catch (err) {
-        console.error("Fallback product load failed", err);
-      }
+      setQuickBuyError("We couldn’t load this product. Return to the catalog and try again.");
     };
 
-    loadProduct().finally(() => {
-      processedQuickBuyIds.add(productId);
+    void loadProduct().finally(() => {
+      setQuickBuyLoading(false);
     });
-  }, [productId, addItem, processedQuickBuyIds]);
+  }, [productId, addItem, quickBuyRetry]);
 
   const handleSubmit = async () => {
     setError("");
+
+    if (user?.userType !== "customer") {
+      setError("Sign in to a customer account before placing your order. Your cart will be kept.");
+      return;
+    }
+
+    if (paymentMethod !== "cash_on_delivery") {
+      setError("Online payments are not available yet. Choose cash on delivery to place this order.");
+      return;
+    }
 
     if (!deliveryLocation) {
       setError("Choose your delivery location on the map before continuing.");
@@ -173,30 +179,63 @@ export default function CheckoutPage() {
       });
 
       const orderId = response.data.data?.orderId;
-      if (!orderId) {
-        throw new Error("Invalid order response");
+      if (response.data.data?.fallback === true) {
+        throw new Error("Order service is temporarily unavailable. Your order was not saved; please try again.");
+      }
+      if (typeof orderId !== "string" || !orderId) {
+        throw new Error("The server returned an invalid order confirmation. Please contact support before retrying.");
       }
 
       localStorage.setItem("currentOrderId", orderId);
-      router.push(`/payment?orderId=${orderId}`);
-    } catch (err) {
-      console.warn("Backend order create failed, using demo checkout flow", err);
-      const fallbackOrderId = `demo-order-${Date.now()}`;
-      localStorage.setItem("currentOrderId", fallbackOrderId);
-      localStorage.setItem("demoOrderPayload", JSON.stringify(orderPayload));
-      router.push(`/payment?orderId=${fallbackOrderId}`);
+      clear();
+      router.push(`/order-success?orderId=${encodeURIComponent(orderId)}`);
+    } catch (requestError) {
+      console.error("Order creation failed", requestError);
+      if (axios.isAxiosError(requestError)) {
+        const serverMessage = requestError.response?.data?.error;
+        setError(
+          typeof serverMessage === "string"
+            ? serverMessage
+            : requestError.response
+              ? "We couldn’t place your order. Check your details and try again."
+              : "We couldn’t reach the order service. Your cart is still saved; please try again."
+        );
+      } else {
+        setError(requestError instanceof Error ? requestError.message : "We couldn’t place your order. Please try again.");
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  if (items.length === 0) {
+  if (items.length === 0 && (quickBuyLoading || quickBuyError || !productId)) {
     return (
       <main className="min-h-screen bg-slate-50 py-20">
         <div className="mx-auto max-w-3xl rounded-3xl bg-white p-10 text-center shadow-lg">
-          <h1 className="text-3xl font-bold text-slate-900">Your cart is empty</h1>
-          <p className="mt-4 text-slate-600">Add items from the catalog or use Buy now from any product card.</p>
+          <h1 className="text-3xl font-bold text-slate-900">
+            {quickBuyLoading ? "Loading your selected product…" : quickBuyError ? "Couldn’t load this product" : "Your cart is empty"}
+          </h1>
+          <p className="mt-4 text-slate-600">
+            {quickBuyLoading
+              ? "Please wait while we prepare checkout."
+              : quickBuyError || "Add items from the catalog or use Buy now from any product card."}
+          </p>
           <div className="mt-6 flex flex-col items-center justify-center gap-3 sm:flex-row">
+            {quickBuyError && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (productId) {
+                    processedQuickBuyIds.current.delete(productId);
+                    setQuickBuyLoading(true);
+                    setQuickBuyRetry((retry) => retry + 1);
+                  }
+                }}
+                className="rounded-full border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-700 transition hover:border-red-500 hover:text-red-600"
+              >
+                Try again
+              </button>
+            )}
             <Link href="/products" className="rounded-full bg-red-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-red-700">
               Browse products
             </Link>
@@ -261,6 +300,12 @@ export default function CheckoutPage() {
             </section>
 
             {error ? <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700" role="alert">{error}</div> : null}
+            {user?.userType !== "customer" && (
+              <p className="rounded-2xl bg-amber-50 p-4 text-sm text-amber-900">
+                Sign in or create a customer account to place your order. Your cart will stay saved on this device.{" "}
+                <Link href="/auth" className="font-semibold underline underline-offset-2">Sign in or register</Link>
+              </p>
+            )}
           </div>
 
           <div className="space-y-6">
@@ -288,15 +333,17 @@ export default function CheckoutPage() {
             <button
               type="button"
               onClick={handleSubmit}
-              disabled={loading || deliveryLookupLoading || !deliveryLocation}
+              disabled={loading || deliveryLookupLoading || !deliveryLocation || user?.userType !== "customer"}
               className="w-full rounded-2xl bg-red-600 px-5 py-4 text-sm font-semibold text-white transition hover:bg-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:bg-slate-400"
             >
               {loading
                 ? "Placing order…"
                 : deliveryLookupLoading
                   ? "Finding delivery address…"
-                  : deliveryLocation
-                    ? "Place order and continue to payment"
+                  : user?.userType !== "customer"
+                    ? "Sign in to place order"
+                    : deliveryLocation
+                    ? "Place cash-on-delivery order"
                     : "Select delivery location to continue"}
             </button>
           </div>
