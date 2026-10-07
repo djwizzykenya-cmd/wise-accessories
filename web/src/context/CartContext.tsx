@@ -81,9 +81,11 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [retryVersion, setRetryVersion] = useState(0);
   const accountIdRef = useRef(accountId);
   const itemsRef = useRef(items);
+  const syncStatusRef = useRef(syncStatus);
   const saveQueue = useRef<Promise<void>>(Promise.resolve());
   accountIdRef.current = accountId;
   itemsRef.current = items;
+  syncStatusRef.current = syncStatus;
 
   useEffect(() => {
     if (!authReady) return;
@@ -156,7 +158,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.warn("Failed to cache account cart", error);
     }
 
-    if (syncStatus === "error") return;
+    if (syncStatusRef.current === "error") return;
 
     const timeoutId = window.setTimeout(() => {
       const cartToSave = items.map(({ productId, quantity }) => ({ productId, quantity }));
@@ -212,7 +214,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }, 400);
 
     return () => window.clearTimeout(timeoutId);
-  }, [accountId, isReady, items, loadedAccountId, retryVersion, syncStatus, token]);
+  }, [accountId, isReady, items, loadedAccountId, retryVersion, token]);
 
   const addItem = (item: CartItem) => {
     setItems((previousItems) => {
