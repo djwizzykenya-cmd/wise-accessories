@@ -319,9 +319,6 @@ export default function AuthPage() {
             </button>
           </form>
 
-          <p className="mt-6 text-center text-xs leading-5 text-slate-500">
-            Admin access is provisioned privately and cannot be created from this form.
-          </p>
         </section>
       </div>
     </main>
